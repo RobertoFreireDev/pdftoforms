@@ -16,7 +16,6 @@ import {
   importConfig,
   loadAll,
   loadSite,
-  matchCount,
   saveSite,
   selectorsFor,
   siteKey,
@@ -362,21 +361,6 @@ async function wire(shadow, host) {
     for (const row of rows()) fillKeyOptions(row.querySelector('.pfx-map-key'));
   }
 
-  function updateRowState(row) {
-    const selector = row.querySelector('.pfx-map-selector').value.trim();
-    const state = row.querySelector('.pfx-map-state');
-    const count = selector ? matchCount(selector) : 0;
-    const ok = count === 1;
-
-    state.textContent = selector ? (ok ? '✓' : '✕') : '';
-    state.dataset.ok = String(ok);
-    state.title = !selector ? ''
-      : count === -1 ? 'Not a valid CSS selector'
-        : count === 0 ? 'Matches nothing on this page'
-          : count === 1 ? 'Matches one field'
-            : `Matches ${count} elements — needs to be more specific`;
-  }
-
   function addRow({ selector = '', key = '', candidates = [] } = {}) {
     const listId = `pfx-selectors-${(rowSeq += 1)}`;
     const row = document.createElement('div');
@@ -385,7 +369,6 @@ async function wire(shadow, host) {
       <input class="pfx-map-selector" type="text" list="${listId}" placeholder="CSS selector" spellcheck="false">
       <datalist id="${listId}"></datalist>
       <select class="pfx-map-key"></select>
-      <span class="pfx-map-state"></span>
       <button class="pfx-map-del" type="button" aria-label="Delete mapping">×</button>
     `;
 
@@ -395,10 +378,7 @@ async function wire(shadow, host) {
     setCandidates(row, candidates);
     fillKeyOptions(row.querySelector('.pfx-map-key'), key);
 
-    selectorInput.addEventListener('input', () => {
-      updateRowState(row);
-      refreshControls();
-    });
+    selectorInput.addEventListener('input', refreshControls);
     row.querySelector('.pfx-map-key').addEventListener('change', refreshControls);
     row.querySelector('.pfx-map-del').addEventListener('click', () => {
       row.remove();
@@ -407,7 +387,6 @@ async function wire(shadow, host) {
     });
 
     mapList.append(row);
-    updateRowState(row);
     updateEmptyState();
     refreshControls();
     return row;

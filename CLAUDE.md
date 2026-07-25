@@ -170,7 +170,7 @@ URL, and the only thing `Fill page` acts on.
   cannot toggle it. `selectorsFor()` offers candidate selectors (id, `[name]`,
   form-scoped `[name]`, `:nth-of-type` path), each verified to resolve to exactly
   that one element; the row's text input is `datalist`-backed so the user can type
-  their own instead. `✓`/`✕` reflects the live match count.
+  their own instead.
 - The key dropdown is grouped — `Fields` for AcroForm entries, `Table N` per table
   — and each option shows `key — value` so the user picks by what they can see. A
   saved key that is not in the currently loaded PDF (or when none is loaded) is kept

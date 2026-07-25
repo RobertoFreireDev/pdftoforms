@@ -216,7 +216,7 @@
 
 .pfx-map-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 12px 18px;
+  grid-template-columns: 1fr 1fr 18px;
   gap: 4px;
   align-items: center;
   margin-bottom: 4px;
@@ -237,16 +237,6 @@
   background: var(--pfx-bg);
   border: 1px solid var(--pfx-border);
   border-radius: 4px;
-}
-
-.pfx-map-state {
-  font-size: 11px;
-  color: var(--pfx-ok);
-  text-align: center;
-}
-
-.pfx-map-state[data-ok="false"] {
-  color: var(--pfx-error);
 }
 
 .pfx-map-del {

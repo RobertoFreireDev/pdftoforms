@@ -131,16 +131,6 @@ export async function importConfig(incoming) {
  * Selectors
  * ------------------------------------------------------------------ */
 
-/** How many elements a selector hits; -1 when the selector itself is invalid. */
-export function matchCount(selector, root = document) {
-  if (!selector) return 0;
-  try {
-    return root.querySelectorAll(selector).length;
-  } catch {
-    return -1;
-  }
-}
-
 /**
  * Candidate selectors for an element, most readable first. Only selectors that
  * actually resolve to this one element are kept, so any of them is safe to save;
