@@ -103,7 +103,7 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 320px;
+  width: 640px;
   max-width: calc(100vw - 32px);
   overflow: hidden;
   background: var(--pfx-bg);
@@ -230,9 +230,9 @@
 .pfx-map-row input,
 .pfx-map-row select {
   min-width: 0;
-  padding: 3px 4px;
+  padding: 5px 7px;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--pfx-fg);
   background: var(--pfx-bg);
   border: 1px solid var(--pfx-border);
@@ -262,43 +262,6 @@
 
 .pfx-map-del:hover {
   color: var(--pfx-error);
-}
-
-/* --------------------------------------------------------- details */
-
-.pfx-details {
-  margin-top: 10px;
-}
-
-.pfx-details[hidden] {
-  display: none;
-}
-
-.pfx-summary {
-  color: var(--pfx-muted);
-  cursor: pointer;
-}
-
-.pfx-report {
-  max-height: 220px;
-  margin-top: 6px;
-  overflow-y: auto;
-}
-
-.pfx-list {
-  margin: 0;
-  font-size: 12px;
-}
-
-.pfx-list dt {
-  font-weight: 600;
-  word-break: break-word;
-}
-
-.pfx-list dd {
-  margin: 0 0 6px;
-  color: var(--pfx-muted);
-  word-break: break-word;
 }
 
 .pfx-note {

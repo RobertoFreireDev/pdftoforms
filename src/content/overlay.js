@@ -97,10 +97,6 @@ function render() {
             <button class="pfx-map-import" type="button">Import</button>
           </div>
         </section>
-        <details class="pfx-details" hidden>
-          <summary class="pfx-summary">Details</summary>
-          <div class="pfx-report"></div>
-        </details>
         <p class="pfx-note">PDF contents stay in this tab's memory only.</p>
       </div>
       <input class="pfx-file" type="file" accept="application/pdf,.pdf" hidden>
@@ -132,8 +128,6 @@ async function wire(shadow, host) {
   const configHint = $('.pfx-config-hint');
   const mapList = $('.pfx-map-list');
   const mapEmpty = $('.pfx-map-empty');
-  const details = $('.pfx-details');
-  const report = $('.pfx-report');
 
   /** Committed mappings for this URL — what "Fill page" actually uses. */
   let savedMappings = [];
@@ -268,7 +262,6 @@ async function wire(shadow, host) {
     if (!file) return;
 
     setStatus(`Reading ${file.name}…`);
-    details.hidden = true;
     // The previous PDF is stale the moment another one is chosen.
     forget();
     setLoaded();
@@ -299,9 +292,6 @@ async function wire(shadow, host) {
       `Filled ${result.filled.length} of ${result.targets} mapped field(s).`,
       result.filled.length ? 'ok' : 'warn',
     );
-
-    report.replaceChildren(renderReport(result));
-    details.hidden = false;
   });
 
   /* ------------------------------------------------------- mapping */
@@ -572,32 +562,7 @@ function summarize(entries) {
   };
 }
 
-function renderReport(result) {
-  const list = document.createElement('dl');
-  list.className = 'pfx-list';
-
-  for (const item of result.filled) {
-    const term = document.createElement('dt');
-    term.textContent = item.target;
-    const def = document.createElement('dd');
-    def.textContent = `${truncate(String(item.value))}  ·  ${item.key}`;
-    list.append(term, def);
-  }
-
-  // Every mapping was asked for by hand, so each failure is worth naming.
-  for (const item of result.skipped) {
-    const term = document.createElement('dt');
-    term.textContent = item.target;
-    const def = document.createElement('dd');
-    def.textContent = `${item.reason}  ·  ${item.key ?? ''}`;
-    list.append(term, def);
-  }
-
-  if (!list.children.length) list.textContent = 'No mappings to apply.';
-  return list;
-}
-
-function truncate(text, max = 48) {
+function truncate(text, max) {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 

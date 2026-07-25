@@ -135,10 +135,11 @@ value to the input's kind and writes it. **Do not reintroduce a guessing pass.**
 An input nobody mapped is an input nobody wanted filled — that is the point of the
 feature, not an accident of the implementation. Never submit the form.
 
-Per row, everything that can go wrong is reported by name rather than swallowed:
-`invalid selector`, `selector matched nothing`, `input is not writable`,
-`key not in PDF`, `value did not fit`. Every mapping was written by hand, so every
-failure is worth showing in Details.
+Per row, everything that can go wrong is named rather than swallowed, in the
+`skipped` array `fillMapped` returns: `invalid selector`, `selector matched
+nothing`, `input is not writable`, `key not in PDF`, `value did not fit`. The
+overlay does not render them — it reports only the filled/total count in the
+status line, since the mappings themselves are already on screen in Config.
 
 A mapping is an instruction, not a guess: no confidence threshold, no ambiguity
 check, and existing values are overwritten.

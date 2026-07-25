@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pdftoformext — manual test form 2 (opaque selectors)</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    max-width: 62rem;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 6rem;
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { margin-bottom: 0.25rem; font-size: 1.4rem; }
+  .intro { margin-top: 0; color: #666; }
+  .intro code, .hint code { background: #8881; padding: 0 0.25em; border-radius: 3px; }
+  fieldset { margin: 1.5rem 0; padding: 1rem 1.25rem 1.25rem; border: 1px solid #8884; border-radius: 8px; }
+  legend { padding: 0 0.4rem; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.75rem 1.25rem; }
+  .field > label { display: block; margin-bottom: 0.2rem; font-weight: 500; }
+  input[type="text"], input[type="number"], input[type="date"], select, textarea {
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    font: inherit;
+    background: Canvas;
+    color: CanvasText;
+    border: 1px solid #8886;
+    border-radius: 5px;
+  }
+  input[readonly] { background: #8881; color: #888; }
+  textarea { min-height: 4rem; resize: vertical; }
+  .inline { display: flex; align-items: center; gap: 0.5rem; }
+  .inline input { width: auto; }
+  .options { display: flex; gap: 1.5rem; }
+  .hint { margin: 0.2rem 0 0.9rem; font-size: 0.8rem; color: #888; }
+  table.grid-rows { width: 100%; border-collapse: collapse; }
+  table.grid-rows th, table.grid-rows td { padding: 0.25rem 0.35rem; text-align: left; }
+  table.grid-rows th { font-size: 0.78rem; font-weight: 600; color: #888; border-bottom: 1px solid #8884; }
+  table.grid-rows input { width: 100%; padding: 0.3rem 0.4rem; font: inherit; background: Canvas; color: CanvasText; border: 1px solid #8886; border-radius: 4px; }
+  .cols-2 { grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); }
+</style>
+</head>
+<body>
+
+<h1>pdftoformext — manual test form 2</h1>
+<p class="intro">
+  The fixture for this page is <code>example/test-form2.pdf</code>: a six-page,
+  text-only SAP-style material master report with no AcroForm at all, so every
+  one of its ~930 keys comes out of the geometric pass under <code>table.*</code>.
+  Nothing on this page hints at which key belongs where — ids are
+  framework-generated noise, names are control paths, several inputs have
+  neither, and two ids are duplicated. Every mapping has to be made by clicking
+  the field and reading the key's <em>value</em> in the dropdown, which is the
+  workflow this harness exists to exercise.
+</p>
+<p class="intro">
+  Expected keys are in HTML comments beside each field so a run can be checked;
+  the extension never reads them. Keys marked ⚠ are ones whose <em>name</em>
+  lies about their contents — a side effect of a two-pair "label value label
+  value" row being read as a five-column table — and they are the most valuable
+  ones to map, because nothing but the visible value identifies them.
+</p>
+
+<!-- ================================================================
+     Opaque ids. selectorsFor() offers "#wd0114" and stops there: the
+     selector is unique and stable but says nothing about the field.
+     ================================================================ -->
+<form id="wd0001-hdr" onsubmit="event.preventDefault(); alert('Submit blocked — this page is a test harness.');">
+  <fieldset>
+    <legend>Run context</legend>
+    <p class="hint">
+      Values here live in the page header and the “Selection Criteria” block of
+      page 1. The header is a four-row block whose cells land in scattered
+      columns, so the keys are positional.
+    </p>
+
+    <div class="grid">
+      <!-- table.0.r0.c3 -> "Date: 25.07.2026" -->
+      <div class="field">
+        <label for="wd0114">Run stamp</label>
+        <input type="text" id="wd0114" name="ctl00$cph$wd0114" autocomplete="off">
+      </div>
+
+      <!-- table.2.r4.c2 -> "01.01.2026", coerced to 2026-01-01 -->
+      <div class="field">
+        <label for="wd0117">Effective from</label>
+        <input type="date" id="wd0117" name="ctl00$cph$wd0117">
+      </div>
+
+      <!-- table.0.r1.c4 -> "System: P01" -->
+      <div class="field">
+        <label for="wd0121">Backend</label>
+        <input type="text" id="wd0121" name="ctl00$cph$wd0121" autocomplete="off">
+      </div>
+
+      <!-- table.0.r1.c6 -> "Client: 800" -->
+      <div class="field">
+        <label for="wd0125">Tenant</label>
+        <input type="text" id="wd0125" name="ctl00$cph$wd0125" autocomplete="off">
+      </div>
+
+      <!-- table.0.r2.c2 -> "User: MULLER_R" -->
+      <div class="field">
+        <label for="wd0129">Requested by</label>
+        <input type="text" id="wd0129" name="ctl00$cph$wd0129" autocomplete="off">
+      </div>
+
+      <!-- table.2.r1.c2 -> "1000, 2000, 3000" -->
+      <div class="field">
+        <label for="wd0133">Plants in scope</label>
+        <input type="text" id="wd0133" name="ctl00$cph$wd0133" autocomplete="off">
+      </div>
+    </div>
+
+    <!-- table.1.r1.c0 -> the full "Generated … Report ZMM_MASTER_OVERVIEW" line -->
+    <div class="field" style="margin-top:0.75rem">
+      <label for="wd0137">Scope note</label>
+      <textarea id="wd0137" name="ctl00$cph$wd0137"></textarea>
+    </div>
+  </fieldset>
+</form>
+
+<!-- ================================================================
+     No ids anywhere below. The only usable selector is the [name]
+     one, and the names are control paths with $ in them — worth
+     having, since that is the character most likely to break a
+     hand-written attribute selector.
+     ================================================================ -->
+<form id="wd0002-mm" name="mmDetail" onsubmit="event.preventDefault(); alert('Submit blocked — this page is a test harness.');">
+  <fieldset>
+    <legend>Material master — basic data</legend>
+    <p class="hint">
+      Page 2, material <code>100000-A012</code>. Its “Basic Data” block is two
+      label/value pairs per line, which the extractor reads as a five-column
+      table — so the header-derived keys carry the <em>first data row's</em>
+      text, not a heading. <code>table.7.pc.2</code> holds the net weight.
+    </p>
+
+    <div class="grid">
+      <!-- table.3.material.2 -> "100000-A012" (page 1 contents table) -->
+      <div class="field">
+        <label>Part no.</label>
+        <input type="text" name="ctl00$cph$mm$f01" autocomplete="off">
+      </div>
+
+      <!-- table.3.description.2 -> "HEX BOLT M8X40 DIN 933 ZN" -->
+      <div class="field">
+        <label>Short text</label>
+        <input type="text" name="ctl00$cph$mm$f02" autocomplete="off">
+      </div>
+
+      <!-- table.3.type.2 -> "ROH"; the select has to resolve it to an option -->
+      <div class="field">
+        <label>Category</label>
+        <select name="ctl00$cph$mm$f03">
+          <option value="">—</option>
+          <option value="ROH">ROH — Raw material</option>
+          <option value="HALB">HALB — Semi-finished</option>
+          <option value="FERT">FERT — Finished</option>
+        </select>
+      </div>
+
+      <!-- table.7.r1.c2 -> "PC" -->
+      <div class="field">
+        <label>Issue unit</label>
+        <input type="text" name="ctl00$cph$mm$f04" autocomplete="off">
+      </div>
+
+      <!-- table.7.r1.c4 -> "0.026 KG" -> 0.026 -->
+      <div class="field">
+        <label>Weight, gross (kg)</label>
+        <input type="number" name="ctl00$cph$mm$f05" step="0.001">
+      </div>
+
+      <!-- ⚠ table.7.pc.2 -> "0.024 KG" -> 0.024 (key says "pc", holds net weight) -->
+      <div class="field">
+        <label>Weight, net (kg)</label>
+        <input type="number" name="ctl00$cph$mm$f06" step="0.001">
+      </div>
+
+      <!-- ⚠ table.7.0_026_kg.2 -> "0.003 L" -> 0.003 -->
+      <div class="field">
+        <label>Volume (l)</label>
+        <input type="number" name="ctl00$cph$mm$f07" step="0.001">
+      </div>
+
+      <!-- ⚠ table.7.pc.3 -> "1010" -->
+      <div class="field">
+        <label>Group code</label>
+        <input type="text" name="ctl00$cph$mm$f08" autocomplete="off">
+      </div>
+
+      <!-- ⚠ table.7.0_026_kg.3 -> "00" -->
+      <div class="field">
+        <label>Division</label>
+        <input type="text" name="ctl00$cph$mm$f09" autocomplete="off">
+      </div>
+
+      <!-- ⚠ table.7.pc.4 -> "84-3310-08" -->
+      <div class="field">
+        <label>Legacy number</label>
+        <input type="text" name="ctl00$cph$mm$f10" autocomplete="off">
+      </div>
+
+      <!-- ⚠ table.7.0_026_kg.4 -> "001" -->
+      <div class="field">
+        <label>Lab / office</label>
+        <input type="text" name="ctl00$cph$mm$f11" autocomplete="off">
+      </div>
+
+      <!-- ⚠ table.7.pc.5 -> "001002003" -->
+      <div class="field">
+        <label>Hierarchy node</label>
+        <input type="text" name="ctl00$cph$mm$f12" autocomplete="off">
+      </div>
+
+      <!-- ⚠ table.7.0_026_kg.5 -> "4006381333931" -->
+      <div class="field">
+        <label>Barcode</label>
+        <input type="text" name="ctl00$cph$mm$f13" autocomplete="off">
+      </div>
+    </div>
+  </fieldset>
+</form>
+
+<!-- ================================================================
+     The two sourcing forms carry identical name attributes, so the
+     bare input[name="…"] candidate matches two elements and is
+     dropped. What survives is the form-scoped selector — the reason
+     selectorsFor() builds one at all.
+     ================================================================ -->
+<div class="grid cols-2">
+
+  <form id="wd0003-src" onsubmit="event.preventDefault(); alert('Submit blocked — this page is a test harness.');">
+    <fieldset>
+      <legend>Source of supply — primary</legend>
+      <p class="hint">
+        Page 2, first purchasing row. Expect
+        <code>#wd0003-src input[name="ctl00$cph$vendor"]</code>, not
+        <code>input[name="ctl00$cph$vendor"]</code>.
+      </p>
+
+      <!-- table.8.vendor.2 -> "100523 - Wuerth Group" -->
+      <div class="field">
+        <label>Supplier</label>
+        <input type="text" name="ctl00$cph$vendor" autocomplete="off">
+      </div>
+
+      <!-- table.8.purch_org.2 -> "1000" -->
+      <div class="field">
+        <label>Buying unit</label>
+        <input type="text" name="ctl00$cph$org" autocomplete="off">
+      </div>
+
+      <!-- table.8.r2.c3 -> "5300001123" -->
+      <div class="field">
+        <label>Agreement</label>
+        <input type="text" name="ctl00$cph$rec" autocomplete="off">
+      </div>
+
+      <!-- table.8.r2.c5 -> "0.17" -->
+      <div class="field">
+        <label>Net each</label>
+        <input type="number" name="ctl00$cph$price" step="0.01">
+      </div>
+
+      <!-- table.8.r2.c7 -> "EUR" -->
+      <div class="field">
+        <label>Settlement currency</label>
+        <select name="ctl00$cph$cur">
+          <option value="">—</option>
+          <option value="CHF">CHF</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="USD">USD</option>
+        </select>
+      </div>
+
+      <!-- table.8.r2.c11 -> "5 days" -->
+      <div class="field">
+        <label>Replenishment</label>
+        <input type="text" name="ctl00$cph$lead" autocomplete="off">
+      </div>
+    </fieldset>
+  </form>
+
+  <form id="wd0004-alt" onsubmit="event.preventDefault(); alert('Submit blocked — this page is a test harness.');">
+    <fieldset>
+      <legend>Source of supply — alternate</legend>
+      <p class="hint">
+        Page 2, second purchasing row. Same six names as the form on the left;
+        only the form scope tells them apart.
+      </p>
+
+      <!-- table.8.vendor.3 -> "100877 - Boellhoff KG" -->
+      <div class="field">
+        <label>Supplier</label>
+        <input type="text" name="ctl00$cph$vendor" autocomplete="off">
+      </div>
+
+      <!-- table.8.purch_org.3 -> "1000" -->
+      <div class="field">
+        <label>Buying unit</label>
+        <input type="text" name="ctl00$cph$org" autocomplete="off">
+      </div>
+
+      <!-- table.8.r3.c3 -> "5300001456" -->
+      <div class="field">
+        <label>Agreement</label>
+        <input type="text" name="ctl00$cph$rec" autocomplete="off">
+      </div>
+
+      <!-- table.8.r3.c5 -> "0.16" -->
+      <div class="field">
+        <label>Net each</label>
+        <input type="number" name="ctl00$cph$price" step="0.01">
+      </div>
+
+      <!-- table.8.r3.c7 -> "EUR" -->
+      <div class="field">
+        <label>Settlement currency</label>
+        <select name="ctl00$cph$cur">
+          <option value="">—</option>
+          <option value="CHF">CHF</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="USD">USD</option>
+        </select>
+      </div>
+
+      <!-- table.8.r3.c11 -> "7 days" -->
+      <div class="field">
+        <label>Replenishment</label>
+        <input type="text" name="ctl00$cph$lead" autocomplete="off">
+      </div>
+    </fieldset>
+  </form>
+
+</div>
+
+<!-- ================================================================
+     Nothing in this table has an id or a name, so every cell falls
+     through to structuralPath(): the nth-of-type chain anchored at
+     #wd0005-grid. The <tbody> is written out explicitly so the static
+     markup matches the path the browser generates.
+     ================================================================ -->
+<fieldset>
+  <legend>Stock by plant</legend>
+  <p class="hint">
+    Page 6, the MB52 grid — 20 data rows across sixteen column bands. Rows are
+    <em>not</em> column-consistent: right-aligned quantities drift between bands,
+    so row 4's on-hand figure is <code>c6</code> where rows 1–3 use
+    <code>c5</code>. Selectors here look like
+    <code>#wd0005-grid &gt; tbody &gt; tr:nth-of-type(1) &gt; td:nth-of-type(3) &gt; input</code>.
+    On-hand is a text input on purpose: <code>"48,200"</code> through
+    <code>toNumber</code> reads the comma as a decimal point and yields 48.2, so
+    a number input would quietly be wrong.
+  </p>
+
+  <table class="grid-rows" id="wd0005-grid">
+    <thead>
+      <tr>
+        <th>Part</th><th>Text</th><th>Plant</th><th>Store</th><th>On hand</th><th>Value (EUR)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- row 1 -> table.43.r1.c0 / .c1 / .c2 / .c3 / .c5 / .c15 -->
+      <tr>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="number" step="0.01"></td>
+      </tr>
+      <!-- row 2 -> table.43.r2.c0 / .c1 / .c2 / .c3 / .c5 / .c15 -->
+      <tr>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="number" step="0.01"></td>
+      </tr>
+      <!-- row 3 -> table.43.r3.c0 / .c1 / .c2 / .c3 / .c5 / .c15 -->
+      <tr>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="number" step="0.01"></td>
+      </tr>
+      <!-- row 4 -> table.43.r4.c0 / .c1 / .c2 / .c3 / .c6 (not c5) / .c15 -->
+      <tr>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="text" autocomplete="off"></td>
+        <td><input type="number" step="0.01"></td>
+      </tr>
+    </tbody>
+  </table>
+</fieldset>
+
+<!-- ================================================================
+     Duplicate id: #wd0210 appears here and again in "Reported
+     failures", so querySelectorAll("#wd0210") returns two and the
+     candidate is rejected. This one has a name to fall back to.
+     ================================================================ -->
+<fieldset id="wd0006-val">
+  <legend>Valuation</legend>
+  <p class="hint">
+    Page 2 “Accounting Data”, plus the report grand total from page 6.
+    <code>table.11.v_moving_avg_price.2</code> holds the <em>standard</em> price
+    — the pair-offset again.
+  </p>
+
+  <div class="grid">
+    <!-- table.11.r1.c2 -> "3000 Raw Materials" -->
+    <div class="field">
+      <label>Valuation class</label>
+      <select name="ctl00$cph$val$class">
+        <option value="">—</option>
+        <option value="3000">3000 — Raw Materials</option>
+        <option value="7900">7900 — Semi-finished Goods</option>
+        <option value="7920">7920 — Finished Goods</option>
+      </select>
+    </div>
+
+    <!-- ⚠ table.11.3000_raw_materials.2 -> "0.174 EUR" -> 0.174 -->
+    <div class="field">
+      <label>Rolling average</label>
+      <input type="number" id="wd0210" name="ctl00$cph$val$mavg" step="0.001">
+    </div>
+
+    <!-- ⚠ table.11.v_moving_avg_price.2 -> "0.180 EUR" -> 0.18 -->
+    <div class="field">
+      <label>Planned price</label>
+      <input type="number" name="ctl00$cph$val$std" step="0.001">
+    </div>
+
+    <!-- ⚠ table.11.3000_raw_materials.3 -> "10,608.40 EUR" -> 10608.4 -->
+    <div class="field">
+      <label>Inventory value, this part</label>
+      <input type="number" name="ctl00$cph$val$tot" step="0.01">
+    </div>
+
+    <!-- table.44.r0.c1 -> "90,796.50" -->
+    <div class="field">
+      <label>Inventory value, report total</label>
+      <input type="number" name="ctl00$cph$val$grand" step="0.01">
+    </div>
+  </div>
+
+  <!-- table.11.r1.c4 -> "V Moving Avg. Price"; the radio labels decide which
+       button that names, and only "V" scores above FILL_THRESHOLD. -->
+  <div class="field" style="margin-top:0.75rem">
+    <label>Price determination</label>
+    <div class="options">
+      <span class="inline">
+        <input type="radio" id="wd0231" name="ctl00$cph$val$ctrl" value="V">
+        <label for="wd0231">Moving average price (V)</label>
+      </span>
+      <span class="inline">
+        <input type="radio" id="wd0232" name="ctl00$cph$val$ctrl" value="S">
+        <label for="wd0232">Standard price (S)</label>
+      </span>
+    </div>
+  </div>
+
+  <!-- table.6.r1.c9 -> "| Status: Released (KRZ)". Not one of toBoolean's
+       known words, so it falls through to Boolean(text) and ticks the box —
+       any non-empty key does. Map table.25.r4.c2 (page 4, "-") to see the
+       opposite: norm("-") is "", which is in FALSY. -->
+  <div class="field inline" style="margin-top:0.75rem">
+    <input type="checkbox" name="ctl00$cph$val$rel">
+    <label>Released for use</label>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Long text</legend>
+  <p class="hint">
+    The internal note on page 2 wraps across two drawn lines, and each line is
+    its own row of <code>table.12</code> — there is no key holding the whole
+    paragraph.
+  </p>
+
+  <!-- table.12.r1.c0 -> "Zinc-plated hexagon head bolt per DIN 933 …" -->
+  <div class="field">
+    <label>Note, line 1</label>
+    <textarea name="ctl00$cph$txt$l1"></textarea>
+  </div>
+
+  <!-- table.12.r2.c0 -> "substitute with uncoated variants …" -->
+  <div class="field">
+    <label>Note, line 2</label>
+    <textarea name="ctl00$cph$txt$l2"></textarea>
+  </div>
+
+  <!-- table.12.r3.c0 -> "Last changed by MULLER_R on 25.07.2026" -->
+  <div class="field">
+    <label>Audit line</label>
+    <input type="text" name="ctl00$cph$txt$aud" autocomplete="off">
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Reported failures</legend>
+  <p class="hint">
+    Map these deliberately wrong and check Details names the reason rather than
+    staying silent.
+  </p>
+
+  <div class="grid">
+    <!-- Map to table.7.r1.c2 ("PC"). toISODate returns null, so applyValue
+         fails and the row is reported as "value did not fit". -->
+    <div class="field">
+      <label>Date field, fed a non-date</label>
+      <input type="date" name="ctl00$cph$err$date">
+    </div>
+
+    <!-- readonly, not disabled: a disabled input never dispatches the click
+         Config listens for, so it could not be mapped in the first place.
+         Any key -> "input is not writable". -->
+    <div class="field">
+      <label>Read-only field</label>
+      <input type="text" name="ctl00$cph$err$ro" value="locked by workflow" readonly>
+    </div>
+
+    <!-- The twin of #wd0210 in Valuation, and the one case the picker cannot
+         solve: structuralPath() stops the moment it reaches an element with an
+         id, so this input's path is "#wd0210" too. Both candidates match two
+         elements, both are rejected, and selectorsFor() falls back to offering
+         the ambiguous "#wd0210" rather than a blank row. Saving it as-is fills
+         the Valuation input instead of this one — which is why the row's text
+         box is editable: the fix is to type the path by hand. -->
+    <div class="field">
+      <label>Duplicated id</label>
+      <input type="number" id="wd0210" step="0.001">
+    </div>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Must stay empty</legend>
+  <p class="hint">
+    The invariant: map a handful of fields above, hit <strong>Fill page</strong>,
+    and confirm every input nobody named is untouched. If anything here gets a
+    value, a guessing pass has crept back in — and this page is where it would
+    show, because the labels are close enough to the PDF's own wording that a
+    fuzzy matcher would happily take them.
+  </p>
+
+  <div class="grid">
+    <div class="field">
+      <label>Material Group</label>
+      <input type="text" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label>Base Unit of Measure</label>
+      <input type="text" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label>Total Stock Value</label>
+      <input type="number" step="0.01">
+    </div>
+
+    <div class="field">
+      <label>Plant</label>
+      <input type="text" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label>Favourite colour</label>
+      <input type="text" autocomplete="off">
+    </div>
+  </div>
+</fieldset>
+
+</body>
+</html>
