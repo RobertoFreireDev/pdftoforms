@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Load a PDF, extract every field and table from it in memory, and autofill the form on the current page.",
   "minimum_chrome_version": "119",
+  "permissions": ["storage"],
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*", "file://*/*"],
@@ -19,6 +20,7 @@
         "src/content/overlay.css",
         "src/lib/pdf-extract.js",
         "src/lib/autofill.js",
+        "src/lib/mappings.js",
         "vendor/pdf.mjs",
         "vendor/pdf.worker.mjs"
       ],

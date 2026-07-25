@@ -1,30 +1,17 @@
 /**
  * Flat extraction object -> the inputs on the current page.
  *
- * Each `input`, `select` and `textarea` is scored against every extraction
- * entry, in descending order of confidence:
+ * Nothing here guesses. The only way a value reaches an input is an explicit
+ * `selector -> key` mapping the user configured for this page: `fillMapped`
+ * resolves the selector, coerces the value to the input's kind, and writes it.
+ * The form is never submitted.
  *
- *   1. exact `name` / `id` match against the key or the raw PDF field name
- *   2. label / aria-label / placeholder text vs. the entry's label
- *   3. normalized fuzzy match
- *
- * Ambiguous targets are left alone rather than guessed at, and the form is
- * never submitted.
+ * Similarity scoring survives for one narrow job — deciding which `<option>` or
+ * radio button of a mapped field the PDF's value refers to.
  */
 
-/** Minimum score before a value is written. */
+/** Minimum similarity before a select option or radio button counts as the match. */
 const FILL_THRESHOLD = 0.62;
-/** A fuzzy winner must beat the runner-up by this much to count as unambiguous. */
-const AMBIGUITY_MARGIN = 0.08;
-
-const EXACT_ID = 1;
-const EXACT_LABEL = 0.88;
-/** Fuzzy scores are capped below the exact tiers so they can never outrank one. */
-const FUZZY_CAP = 0.8;
-
-const SKIP_TYPES = new Set([
-  'hidden', 'submit', 'reset', 'button', 'image', 'file', 'password',
-]);
 
 const TRUTHY = new Set([
   'true', 'yes', 'y', 'on', 'x', '1', 'checked', 'sim', 'si', 'oui', 'ja',
@@ -91,14 +78,6 @@ function similarity(a, b) {
  * Page targets
  * ------------------------------------------------------------------ */
 
-function isVisible(el) {
-  if (el.getClientRects().length > 0) return true;
-  // Off-screen-but-focusable inputs are still legitimate fill targets; only a
-  // genuinely un-rendered subtree is worth skipping.
-  const style = el.ownerDocument.defaultView?.getComputedStyle(el);
-  return !style || (style.display !== 'none' && style.visibility !== 'hidden');
-}
-
 function labelTextFor(el) {
   const parts = [];
   const doc = el.ownerDocument;
@@ -132,14 +111,7 @@ function labelTextFor(el) {
  * are the individual buttons.
  */
 function describeTarget(el, elements = [el]) {
-  return {
-    el,
-    elements,
-    kind: targetKind(el),
-    identifiers: [el.name, el.id].filter(Boolean),
-    labels: labelTextFor(el),
-    describe: () => `${el.tagName.toLowerCase()}${el.name ? `[name="${el.name}"]` : ''}${el.id ? `#${el.id}` : ''}`,
-  };
+  return { el, elements, kind: targetKind(el) };
 }
 
 function targetKind(el) {
@@ -154,45 +126,28 @@ function targetKind(el) {
   return 'text';
 }
 
-function collectTargets(root) {
-  const targets = [];
-  const radioGroups = new Map();
-
-  for (const el of root.querySelectorAll('input, select, textarea')) {
-    if (el.disabled || el.readOnly) continue;
-    if (el.tagName === 'INPUT' && SKIP_TYPES.has((el.type || '').toLowerCase())) continue;
-    if (el.closest('[aria-hidden="true"]')) continue;
-    if (!isVisible(el)) continue;
-
-    if (el.type === 'radio') {
-      // The whole group is one logical field; the matched value picks a button.
-      const groupKey = el.name || `__anonymous_${targets.length}`;
-      if (!radioGroups.has(groupKey)) {
-        const group = describeTarget(el, []);
-        radioGroups.set(groupKey, group);
-        targets.push(group);
-      }
-      const group = radioGroups.get(groupKey);
-      group.elements.push(el);
-      for (const text of labelTextFor(el)) {
-        // A radio's own label describes the option, not the field — keep it for
-        // option matching but do not let it pollute the field's own labels.
-        group.optionLabels ??= [];
-        group.optionLabels.push({ el, text });
-      }
-      continue;
-    }
-
-    targets.push(describeTarget(el));
+/** A radio's own label describes the option, not the field. */
+function addRadio(group, el) {
+  group.elements.push(el);
+  for (const text of labelTextFor(el)) {
+    group.optionLabels ??= [];
+    group.optionLabels.push({ el, text });
   }
+}
 
-  // A radio group's field-level label lives on its fieldset or its container.
-  for (const group of radioGroups.values()) {
-    const legend = group.el.closest('fieldset')?.querySelector('legend');
-    if (legend) group.labels.unshift(legend.textContent.replace(/\s+/g, ' ').trim());
-  }
+/**
+ * One element -> one target, pulling in the rest of its radio group so a
+ * mapping that points at a single button can still pick any option.
+ */
+function targetFor(el, root = el.ownerDocument) {
+  if (el.type !== 'radio') return describeTarget(el);
 
-  return targets;
+  const group = describeTarget(el, []);
+  const buttons = el.name
+    ? root.querySelectorAll(`input[type="radio"][name="${el.name.replace(/["\\]/g, '\\$&')}"]`)
+    : [el];
+  for (const radio of buttons) addRadio(group, radio);
+  return group;
 }
 
 /* ------------------------------------------------------------------ *
@@ -375,150 +330,64 @@ function applyValue(target, entry, dayFirst) {
 }
 
 /* ------------------------------------------------------------------ *
- * Matching
- * ------------------------------------------------------------------ */
-
-/** The parts of an entry worth matching an input's name/id against. */
-function identifiersOf(entry) {
-  const ids = [];
-  if (entry.name) ids.push(entry.name);
-  if (entry.key?.startsWith('field.')) ids.push(entry.key.slice('field.'.length));
-  if (entry.header) ids.push(entry.header);
-  ids.push(entry.key);
-  return ids.filter(Boolean);
-}
-
-function labelsOf(entry) {
-  return [entry.label, entry.header].filter(Boolean);
-}
-
-function scorePair(target, candidate) {
-  const { identifiers, labels } = candidate;
-
-  for (const a of target.identifiers) {
-    for (const b of identifiers) {
-      if (norm(a) && norm(a) === norm(b)) return EXACT_ID;
-    }
-  }
-
-  for (const a of target.labels) {
-    for (const b of [...labels, ...identifiers]) {
-      if (norm(a) && norm(a) === norm(b)) return EXACT_LABEL;
-    }
-  }
-
-  let best = 0;
-  for (const a of [...target.identifiers, ...target.labels]) {
-    for (const b of [...identifiers, ...labels]) {
-      best = Math.max(best, similarity(a, b));
-    }
-  }
-  return best * FUZZY_CAP;
-}
-
-/**
- * What an entry actually points at. A headed table cell is emitted under two
- * keys (`table.0.r3.c1` and `table.0.total.3`), and those two are one cell, not
- * two competing answers — the ambiguity check has to see them as the same thing.
- */
-function identityOf(entry) {
-  if (entry.source === 'table') return `cell:${entry.table}.${entry.row}.${entry.col}`;
-  return `key:${entry.key}`;
-}
-
-/** Entries whose value could not sensibly land in this kind of input. */
-function isCompatible(kind, entry, dayFirst) {
-  if (kind === 'checkbox' || kind === 'radio') return true;
-  if (typeof entry.value === 'boolean') return false;
-  const value = coerce(kind, entry.value, dayFirst);
-  return value !== null && value !== '';
-}
-
-/* ------------------------------------------------------------------ *
  * Entry point
  * ------------------------------------------------------------------ */
 
 /**
+ * Fill from an explicit selector -> key list. This is the only way anything on
+ * the page gets written.
+ *
+ * A mapping is an instruction, not a guess: no threshold, no ambiguity check,
+ * and existing values are overwritten. Past the lookup comes coercion,
+ * select/radio option matching, the prototype setter and the input/change
+ * events — all of `applyValue`.
+ *
  * @param {Record<string, object>} extraction flat object from pdf-extract
+ * @param {{selector: string, key: string}[]} mappings
  * @param {object} [options]
- * @param {ParentNode} [options.root=document] subtree to fill
- * @param {boolean} [options.overwrite=false] replace values already present
- * @param {boolean} [options.dryRun=false] score everything, write nothing
+ * @param {ParentNode} [options.root=document]
  * @returns {{filled: object[], skipped: object[], targets: number}}
  */
-export function autofill(extraction, options = {}) {
-  const {
-    root = document,
-    overwrite = false,
-    dryRun = false,
-  } = options;
-
+export function fillMapped(extraction, mappings, options = {}) {
+  const { root = document } = options;
   const dayFirst = !(navigator.language || '').toLowerCase().startsWith('en-us');
 
-  const candidates = Object.values(extraction)
-    .filter((entry) => entry.value !== '' && entry.value !== null && entry.value !== undefined)
-    .filter((entry) => !entry.readOnly)
-    .map((entry) => ({
-      entry,
-      identifiers: identifiersOf(entry),
-      labels: labelsOf(entry),
-    }));
-
-  const targets = collectTargets(root);
   const filled = [];
   const skipped = [];
-  const used = new Set();
 
-  for (const target of targets) {
-    if (!overwrite && hasValue(target)) {
-      skipped.push({ target: target.describe(), reason: 'already filled' });
+  for (const { selector, key } of mappings) {
+    if (!selector || !key) continue;
+
+    let el = null;
+    try {
+      el = root.querySelector(selector);
+    } catch {
+      skipped.push({ target: selector, key, reason: 'invalid selector' });
       continue;
     }
 
-    const scored = [];
-    for (const candidate of candidates) {
-      if (used.has(identityOf(candidate.entry))) continue;
-      if (!isCompatible(target.kind, candidate.entry, dayFirst)) continue;
-      const score = scorePair(target, candidate);
-      if (score > 0) scored.push({ candidate, score });
+    if (!el) {
+      skipped.push({ target: selector, key, reason: 'selector matched nothing' });
+      continue;
     }
-    scored.sort((a, b) => b.score - a.score);
-
-    const best = scored[0];
-    if (!best || best.score < FILL_THRESHOLD) {
-      skipped.push({ target: target.describe(), reason: 'no match', score: best?.score ?? 0 });
+    if (el.disabled || el.readOnly) {
+      skipped.push({ target: selector, key, reason: 'input is not writable' });
       continue;
     }
 
-    // The runner-up is the best candidate pointing somewhere *else*; the same
-    // cell reached through its other key is not competition.
-    const bestIdentity = identityOf(best.candidate.entry);
-    const runnerUp = scored.find((item) => identityOf(item.candidate.entry) !== bestIdentity);
-
-    if (runnerUp && best.score - runnerUp.score < AMBIGUITY_MARGIN) {
-      // Two different values fit equally well — leave it alone rather than
-      // guess. This catches an input named "total" against a table column of
-      // three totals, where any single answer would be arbitrary.
-      skipped.push({ target: target.describe(), reason: 'ambiguous', score: best.score });
+    const entry = extraction[key];
+    if (!entry || entry.value === '' || entry.value === null || entry.value === undefined) {
+      skipped.push({ target: selector, key, reason: 'key not in PDF' });
       continue;
     }
 
-    const { entry } = best.candidate;
-    const record = { target: target.describe(), key: entry.key, value: entry.value, score: best.score };
-
-    if (dryRun || applyValue(target, entry, dayFirst)) {
-      filled.push(record);
-      used.add(bestIdentity);
+    const target = targetFor(el, el.ownerDocument);
+    if (applyValue(target, entry, dayFirst)) {
+      filled.push({ target: selector, key, value: entry.value, score: 1 });
     } else {
-      skipped.push({ target: target.describe(), reason: 'value did not fit', score: best.score });
+      skipped.push({ target: selector, key, reason: 'value did not fit' });
     }
   }
 
-  return { filled, skipped, targets: targets.length };
-}
-
-function hasValue(target) {
-  if (target.kind === 'radio') return target.elements.some((el) => el.checked);
-  if (target.kind === 'checkbox') return target.el.checked;
-  return Boolean(target.el.value);
+  return { filled, skipped, targets: mappings.length };
 }

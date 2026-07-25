@@ -2,7 +2,7 @@
  * PDF -> one flat, keyed extraction object.
  *
  * Every AcroForm field and every table cell in the document gets a key. Values
- * carry provenance (page, label, rect) so autofill can rank candidates.
+ * carry provenance (page, label, rect) so the Config dropdown can describe them.
  *
  * Key shapes:
  *   field.<sanitized field name>              AcroForm field
