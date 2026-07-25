@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pdftoformext — manual test form</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 6rem;
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { margin-bottom: 0.25rem; font-size: 1.4rem; }
+  .intro { margin-top: 0; color: #666; }
+  .intro code { background: #8881; padding: 0 0.25em; border-radius: 3px; }
+  fieldset { margin: 1.5rem 0; padding: 1rem 1.25rem 1.25rem; border: 1px solid #8884; border-radius: 8px; }
+  legend { padding: 0 0.4rem; font-weight: 600; }
+  .field { margin-bottom: 0.9rem; }
+  .field > label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+  input[type="text"], input[type="email"], input[type="tel"], input[type="date"],
+  input[type="number"], select, textarea {
+    width: 100%;
+    padding: 0.45rem 0.55rem;
+    font: inherit;
+    background: Canvas;
+    color: CanvasText;
+    border: 1px solid #8886;
+    border-radius: 5px;
+  }
+  textarea { min-height: 4.5rem; resize: vertical; }
+  .inline { display: flex; align-items: center; gap: 0.5rem; }
+  .inline input { width: auto; }
+  .options { display: flex; gap: 1.25rem; }
+  .hint { margin-top: 0.2rem; font-size: 0.8rem; color: #888; }
+</style>
+</head>
+<body>
+
+<h1>pdftoformext — manual test form</h1>
+<p class="intro">
+  Load the extension, click <strong>Fill from PDF</strong> in the top-right corner
+  and choose <code>example/test-form.pdf</code>. Input names here are deliberately
+  <em>near</em> the PDF's field names rather than identical, so the fuzzy matcher
+  has to do real work.
+</p>
+
+<form id="application" onsubmit="event.preventDefault(); alert('Submit blocked — this page is a test harness.');">
+
+  <fieldset>
+    <legend>Applicant</legend>
+
+    <!-- Matches field.applicant_name on the input name, before any label is read. -->
+    <div class="field">
+      <label for="applicantName">Applicant name</label>
+      <input type="text" id="applicantName" name="applicantName" autocomplete="off">
+    </div>
+
+    <!-- Label text matches the PDF's "Email Address"; the input name does not. -->
+    <div class="field">
+      <label for="email">E-mail address</label>
+      <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label for="phone">Phone number</label>
+      <input type="tel" id="phone" name="phone" autocomplete="off">
+    </div>
+
+    <!-- The PDF holds "14/03/1988"; a date input needs 1988-03-14. -->
+    <div class="field">
+      <label for="birthDate">Date of birth</label>
+      <input type="date" id="birthDate" name="birthDate">
+    </div>
+
+    <!-- The PDF holds "87500.00" as text. -->
+    <div class="field">
+      <label for="income">Annual income</label>
+      <input type="number" id="income" name="income" step="0.01">
+    </div>
+
+    <div class="field">
+      <label for="zip">Postal code</label>
+      <input type="text" id="zip" name="zip" autocomplete="off">
+    </div>
+
+    <!-- Select: the PDF's value "Brazil" has to be resolved to an option. -->
+    <div class="field">
+      <label for="country">Country of residence</label>
+      <select id="country" name="country">
+        <option value="">Choose…</option>
+        <option value="br">Brazil</option>
+        <option value="ca">Canada</option>
+        <option value="pt">Portugal</option>
+        <option value="us">United States</option>
+      </select>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Preferred contact</legend>
+    <div class="options">
+      <span class="inline">
+        <input type="radio" id="contactEmail" name="contactPreference" value="email">
+        <label for="contactEmail">Email</label>
+      </span>
+      <span class="inline">
+        <input type="radio" id="contactPhone" name="contactPreference" value="phone">
+        <label for="contactPhone">Phone</label>
+      </span>
+    </div>
+    <p class="hint">The PDF's radio field holds “Email”.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Policy</legend>
+    <p class="hint">
+      These three come from a two-column block of plain text in the PDF — no form
+      fields involved — so they exercise the geometric table extraction.
+    </p>
+
+    <div class="field">
+      <label for="policyNumber">Policy number</label>
+      <input type="text" id="policyNumber" name="policyNumber" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label for="issueDate">Issue date</label>
+      <input type="date" id="issueDate" name="issueDate">
+    </div>
+
+    <div class="field">
+      <label for="coverageTier">Coverage tier</label>
+      <input type="text" id="coverageTier" name="coverageTier" autocomplete="off">
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Should stay empty</legend>
+    <p class="hint">
+      Both of these are here to prove the matcher declines rather than guesses.
+    </p>
+
+    <!-- "Total" is the header of three separate table rows: genuinely ambiguous. -->
+    <div class="field">
+      <label for="total">Total</label>
+      <input type="number" id="total" name="total" step="0.01">
+    </div>
+
+    <!-- Nothing in the PDF is remotely close to this. -->
+    <div class="field">
+      <label for="favouriteColour">Favourite colour</label>
+      <input type="text" id="favouriteColour" name="favouriteColour" autocomplete="off">
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Other</legend>
+
+    <div class="field">
+      <label for="additionalNotes">Additional notes</label>
+      <textarea id="additionalNotes" name="additionalNotes"></textarea>
+    </div>
+
+    <div class="field inline">
+      <input type="checkbox" id="newsletterOptIn" name="newsletterOptIn">
+      <label for="newsletterOptIn">Subscribe to the newsletter</label>
+    </div>
+  </fieldset>
+
+  <button type="submit">Submit (blocked)</button>
+</form>
+
+</body>
+</html>

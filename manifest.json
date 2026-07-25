@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "pdftoformext",
+  "version": "0.1.0",
+  "description": "Load a PDF, extract every field and table from it in memory, and autofill the form on the current page.",
+  "minimum_chrome_version": "119",
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*", "file://*/*"],
+      "js": ["src/content/bootstrap.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/content/overlay.js",
+        "src/content/overlay.css",
+        "src/lib/pdf-extract.js",
+        "src/lib/autofill.js",
+        "vendor/pdf.mjs",
+        "vendor/pdf.worker.mjs"
+      ],
+      "matches": ["http://*/*", "https://*/*", "file://*/*"]
+    }
+  ]
+}

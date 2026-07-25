@@ -1,0 +1,143 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 18 0 R] /DA (/Helv 10 Tf 0 g) /DR << /Font << /Helv 4 0 R >> >> /NeedAppearances true >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 21 0 R /Annots [8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 19 0 R 20 0 R] >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 12 12] /Resources << >> /Length 0 >>
+stream
+
+endstream
+endobj
+7 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 12 12] /Resources << >> /Length 39 >>
+stream
+0 g
+2 w
+2 2 m 10 10 l S
+10 2 m 2 10 l S
+endstream
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [250 720 470 738] /DA (/Helv 10 Tf 0 g) /FT /Tx /T (applicant_name) /TU (Applicant Name) /V (Ana Ferreira Lima) >>
+endobj
+9 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [250 692 470 710] /DA (/Helv 10 Tf 0 g) /FT /Tx /T (email_address) /TU (Email Address) /V (ana.lima@example.com) >>
+endobj
+10 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [250 664 470 682] /DA (/Helv 10 Tf 0 g) /FT /Tx /T (phone_number) /TU (Phone Number) /V (+55 21 98765-4321) >>
+endobj
+11 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [250 636 470 654] /DA (/Helv 10 Tf 0 g) /FT /Tx /T (date_of_birth) /TU (Date of Birth) /V (14/03/1988) >>
+endobj
+12 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [250 608 470 626] /DA (/Helv 10 Tf 0 g) /FT /Tx /T (annual_income) /TU (Annual Income) /V (87500.00) >>
+endobj
+13 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [250 580 470 598] /DA (/Helv 10 Tf 0 g) /FT /Tx /T (postal_code) /TU (Postal Code) /V (22450-050) >>
+endobj
+14 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [250 552 470 570] /DA (/Helv 10 Tf 0 g) /FT /Tx /T (additional_notes) /TU (Additional Notes) /V (Prefers contact after 6pm.) >>
+endobj
+15 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [250 524 470 542] /DA (/Helv 10 Tf 0 g) /FT /Tx /T (empty_reference) /TU (Reference Number) /V () >>
+endobj
+16 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [250 496 470 514] /DA (/Helv 10 Tf 0 g) /FT /Ch /Ff 131072 /T (country_of_residence) /TU (Country of Residence) /V (Brazil) /Opt [(Brazil) (Canada) (Portugal) (United States)] >>
+endobj
+17 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [250 468 264 482] /DA (/Helv 10 Tf 0 g) /FT /Btn /T (newsletter_opt_in) /TU (Newsletter Opt In) /V /Yes /AS /Yes /AP << /N << /Yes 7 0 R /Off 6 0 R >> >> >>
+endobj
+18 0 obj
+<< /FT /Btn /Ff 32768 /T (contact_preference) /TU (Contact Preference) /V /Email /Kids [19 0 R 20 0 R] >>
+endobj
+19 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Parent 18 0 R /Rect [250 440 264 454] /AS /Email /AP << /N << /Email 7 0 R /Off 6 0 R >> >> >>
+endobj
+20 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Parent 18 0 R /Rect [360 440 374 454] /AS /Off /AP << /N << /Phone 7 0 R /Off 6 0 R >> >> >>
+endobj
+21 0 obj
+<<  /Length 1614 >>
+stream
+BT /F2 16 Tf 72 760 Td (Membership Application) Tj ET
+BT /F1 11 Tf 72 725 Td (Applicant name:) Tj ET
+BT /F1 11 Tf 72 697 Td (Email address:) Tj ET
+BT /F1 11 Tf 72 669 Td (Phone number:) Tj ET
+BT /F1 11 Tf 72 641 Td (Date of birth:) Tj ET
+BT /F1 11 Tf 72 613 Td (Annual income:) Tj ET
+BT /F1 11 Tf 72 585 Td (Postal code:) Tj ET
+BT /F1 11 Tf 72 557 Td (Additional notes:) Tj ET
+BT /F1 11 Tf 72 529 Td (Reference number:) Tj ET
+BT /F1 11 Tf 72 501 Td (Country of residence:) Tj ET
+BT /F1 11 Tf 72 473 Td (Subscribe to newsletter:) Tj ET
+BT /F1 11 Tf 270 443 Td (Email) Tj ET
+BT /F1 11 Tf 380 443 Td (Phone) Tj ET
+BT /F1 11 Tf 72 443 Td (Preferred contact:) Tj ET
+BT /F2 13 Tf 72 396 Td (Policy details) Tj ET
+BT /F1 11 Tf 72 374 Td (Policy number) Tj ET
+BT /F1 11 Tf 250 374 Td (POL-99823) Tj ET
+BT /F1 11 Tf 72 356 Td (Issue date) Tj ET
+BT /F1 11 Tf 250 356 Td (23/09/2023) Tj ET
+BT /F1 11 Tf 72 338 Td (Coverage tier) Tj ET
+BT /F1 11 Tf 250 338 Td (Gold) Tj ET
+BT /F2 13 Tf 72 280 Td (Order summary) Tj ET
+BT /F2 11 Tf 72 258 Td (Item) Tj ET
+BT /F2 11 Tf 250 258 Td (Quantity) Tj ET
+BT /F2 11 Tf 350 258 Td (Unit Price) Tj ET
+BT /F2 11 Tf 450 258 Td (Total) Tj ET
+BT /F1 11 Tf 72 240 Td (Widget A) Tj ET
+BT /F1 11 Tf 250 240 Td (2) Tj ET
+BT /F1 11 Tf 350 240 Td (19.90) Tj ET
+BT /F1 11 Tf 450 240 Td (39.80) Tj ET
+BT /F1 11 Tf 72 222 Td (Widget B) Tj ET
+BT /F1 11 Tf 250 222 Td (1) Tj ET
+BT /F1 11 Tf 350 222 Td (5.00) Tj ET
+BT /F1 11 Tf 450 222 Td (5.00) Tj ET
+BT /F1 11 Tf 72 204 Td (Service fee) Tj ET
+BT /F1 11 Tf 250 204 Td (1) Tj ET
+BT /F1 11 Tf 350 204 Td (12.50) Tj ET
+BT /F1 11 Tf 450 204 Td (12.50) Tj ET
+endstream
+endobj
+xref
+0 22
+0000000000 65535 f 
+0000000015 00000 n 
+0000000243 00000 n 
+0000000300 00000 n 
+0000000529 00000 n 
+0000000626 00000 n 
+0000000728 00000 n 
+0000000842 00000 n 
+0000000996 00000 n 
+0000001179 00000 n 
+0000001363 00000 n 
+0000001543 00000 n 
+0000001718 00000 n 
+0000001891 00000 n 
+0000002061 00000 n 
+0000002258 00000 n 
+0000002428 00000 n 
+0000002676 00000 n 
+0000002902 00000 n 
+0000003024 00000 n 
+0000003183 00000 n 
+0000003340 00000 n 
+trailer
+<< /Size 22 /Root 1 0 R >>
+startxref
+5008
+%%EOF
