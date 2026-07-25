@@ -129,7 +129,7 @@ async function wire(shadow, host) {
   const mapList = $('.pfx-map-list');
   const mapEmpty = $('.pfx-map-empty');
 
-  /** Committed mappings for this URL — what "Fill page" actually uses. */
+  /** Mappings as last committed to storage — what the rows are restored from. */
   let savedMappings = [];
   let rowSeq = 0;
 
@@ -141,10 +141,14 @@ async function wire(shadow, host) {
   /**
    * Every button is enabled only when it can actually do something. Nothing
    * fills without a mapping, and nothing is mapped without a PDF to map from.
+   *
+   * Filling reads the rows on screen, not what storage holds, so it stays live
+   * while Config is open — editing a row and filling is how a mapping gets
+   * tried before it is committed.
    */
   const refreshControls = () => {
     const loaded = Boolean(extraction);
-    fillButton.disabled = !loaded || savedMappings.length === 0;
+    fillButton.disabled = !loaded || currentRowMappings().length === 0;
     configButton.disabled = !loaded;
     // An empty list is still worth saving when there is something to clear.
     saveButton.disabled = currentRowMappings().length === 0 && savedMappings.length === 0;
@@ -282,14 +286,19 @@ async function wire(shadow, host) {
     }
   });
 
-  // The saved mappings are the whole story: an input nobody mapped is an input
-  // nobody wanted filled.
+  // The rows on screen are the whole story: an input nobody mapped is an input
+  // nobody wanted filled. They are what is on screen rather than what is in
+  // storage so that Save is about *keeping* a mapping, not about arming it.
   fillButton.addEventListener('click', () => {
-    if (!extraction || !savedMappings.length) return;
+    const list = currentRowMappings();
+    if (!extraction || !list.length) return;
 
-    const result = fillMapped(extraction, savedMappings, { root: document });
+    const result = fillMapped(extraction, list, { root: document });
+    // Rows survive closing Config, so what just filled the page can be a list
+    // the user is not looking at. Say when it was not the saved one.
+    const pending = sameMappings(list, savedMappings) ? '' : ' Unsaved mappings.';
     setStatus(
-      `Filled ${result.filled.length} of ${result.targets} mapped field(s).`,
+      `Filled ${result.filled.length} of ${result.targets} mapped field(s).${pending}`,
       result.filled.length ? 'ok' : 'warn',
     );
   });
@@ -485,6 +494,8 @@ async function wire(shadow, host) {
       document.removeEventListener('mousedown', onPagePress, true);
       document.removeEventListener('click', onPagePick, true);
     }
+    // Opening or closing Config is itself one of the conditions now.
+    refreshControls();
   }
 
   configButton.addEventListener('click', () => openConfig(config.hidden));
@@ -560,6 +571,12 @@ function summarize(entries) {
     fields: values.filter((entry) => entry.source === 'acroform').length,
     cells: values.filter((entry) => entry.source === 'table').length,
   };
+}
+
+/** Order matters: the rows are a list the user arranged, not a set. */
+function sameMappings(a, b) {
+  return a.length === b.length
+    && a.every((entry, i) => entry.selector === b[i].selector && entry.key === b[i].key);
 }
 
 function truncate(text, max) {

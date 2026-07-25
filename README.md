@@ -4,8 +4,9 @@ A Chrome extension (Manifest V3) that fills the form you are looking at from a P
 
 Click the button in the top-right corner of any page and pick a PDF: the extension
 reads every AcroForm field and every table cell out of it. You then say, once per
-page, which PDF value belongs in which input — click a field on the page, pick its
-value from the dropdown, save. From then on **Fill page** fills that page.
+page, which PDF value belongs in which input — click a field on the page and pick
+its value from the dropdown. **Fill page** applies the mapping list as it stands;
+**Save** is what makes it come back on the next visit.
 
 It fills what you mapped and nothing else. No guessing at which input looks like
 which field, so it never quietly writes a value somewhere you did not ask for.
@@ -32,11 +33,12 @@ Open `example/test-form.html` and, in the panel:
 1. **Load PDF…** → `example/test-form.pdf`
 2. **Config** → click a field on the page, then pick its value from the dropdown.
    Repeat for as many fields as you like.
-3. **Save**, then **Fill page**.
+3. **Fill page** — with **Config** still open, if you like. Hit **Save** to keep
+   the mapping for next time.
 
 Only the fields you mapped are written; everything else is left alone, and the
-form is never submitted. Mappings are remembered per page, so the next visit is
-just *Load PDF…* → *Fill page*.
+form is never submitted. Saved mappings are remembered per page, so the next
+visit is just *Load PDF…* → *Fill page*.
 
 ## How it works
 

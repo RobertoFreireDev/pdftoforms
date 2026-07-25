@@ -25,8 +25,8 @@ vendored. Update this file as pieces change.
    script). It is never written to `chrome.storage`, `localStorage`, cookies, a
    server, or anywhere else, and it is discarded on page unload.
 5. **Fill page** is the one and only place that writes to the page's inputs, and
-   it writes **only what the saved mappings for this URL name**. There is no
-   guessing pass and no fallback. With no mappings saved, the button is disabled.
+   it writes **only what the mapping rows currently on screen name**. There is no
+   guessing pass and no fallback. With no mappings, the button is disabled.
 
 Which is also the enablement rule for the whole panel — each control is live only
 when it can do something:
@@ -35,7 +35,7 @@ when it can do something:
 |---|---|
 | Load PDF… / Import | always |
 | Config | a PDF is loaded (a mapping picks a PDF key; with no PDF there is none to pick) |
-| Fill page | a PDF is loaded **and** this URL has ≥1 saved mapping |
+| Fill page | a PDF is loaded and ≥1 row on screen has both selector and key (Config open or closed) |
 | Save | a row has both selector and key, **or** there are saved mappings to clear |
 | Export | some stored site has ≥1 mapping |
 
@@ -176,7 +176,12 @@ URL, and the only thing `Fill page` acts on.
   saved key that is not in the currently loaded PDF (or when none is loaded) is kept
   as its own option so re-rendering never loses a mapping.
 - **Mappings are the only input to `Fill page`**, which calls `fillMapped` and
-  touches nothing else on the page. With none saved, the button is disabled.
+  touches nothing else on the page. It takes `currentRowMappings()` — the rows as
+  they stand — not `savedMappings`, so a row can be tried before it is committed
+  and the button stays live while Config is open. With no complete row, it is
+  disabled. Rows outlive closing Config, so a fill can run from a list the user
+  is not looking at; when it differs from what was saved the status line says
+  `Unsaved mappings.` rather than letting that pass silently.
 - **Save** stays enabled when the row list is empty but the page *has* saved
   mappings — deleting every row and saving is how a page's mappings get cleared.
   **Export** is disabled unless some stored site has a mapping; note that a site
@@ -219,15 +224,17 @@ few of each exercises every branch of `applyValue` — the select and radio path
 particular, which still do option matching.
 
 The round trip is: load `example/test-form.pdf`, open Config, click fields on the
-page, pick each one's key, **Save**, **Fill page**.
+page, pick each one's key, **Fill page**. **Save** only decides whether those rows
+come back on the next visit — filling works from the rows either way, and skipping
+it should put `Unsaved mappings.` on the status line.
 
 **The invariant is that nothing else moves.** Map two or three inputs, fill, and
 confirm every unmapped input on the page is still exactly as it was. If anything
 the mappings did not name gets a value, a guessing pass has crept back in.
 
 Worth checking alongside it: with no PDF loaded, Config and Fill page are both
-disabled and clicking a form field does nothing; after clearing a page's mappings,
-Fill page goes back to disabled.
+disabled and clicking a form field does nothing; after deleting every row, Fill
+page goes back to disabled without needing a Save first.
 
 `example/make-test-pdf.mjs` regenerates the fixture (`node example/make-test-pdf.mjs`).
 Edit it rather than hand-patching the PDF.
