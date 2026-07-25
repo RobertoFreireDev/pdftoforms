@@ -100,12 +100,18 @@ Each value keeps its provenance so autofill can rank candidates:
 }
 ```
 
+A headered data cell gets **both** table key shapes — two entries, one cell, with
+identical `table`/`row`/`col`/`value` and only `key` differing. The positional one
+is always emitted first. Anything reading the object back has to know that, which
+is what `tablesOf` is for.
+
 Rules:
 
 - **Coverage is the requirement.** Every field and every table cell in the PDF must
   appear. Do not silently drop empty fields — emit them with an empty value.
 - Keys must be **stable** for the same PDF and **unique**. On collision, suffix
-  `__2`, `__3`, ….
+  `__2`, `__3`, …. `entry.key` is written back by `put()`, so it is always the real
+  map key — never reconstruct one from `table`/`row`/`col`.
 - Text-only (non-AcroForm) PDFs: fall back to geometric extraction from
   `getTextContent()` — cluster text items into rows by shared `y`, into columns by
   shared `x`, and emit them under the `table.*` scheme.
@@ -125,6 +131,27 @@ key shapes alone:
   from the cell to its left, which is what makes label/value PDFs autofill well.
 - Radio widgets sharing a field name collapse into one entry holding the selected
   option, rather than one entry per button.
+
+`pdf-extract.js` also exports **`tablesOf(extraction)`**, the inverse of
+`emitTables`: it regroups table cells into
+`{index, page, cols, headers, rows}[]` so the Config picker can draw a table as a
+table. It lives next to `emitTables` rather than in the UI because everything it
+undoes is a choice made in `emitTables`, and the two invariants it leans on are
+invisible from anywhere else:
+
+- **Positional key first.** Dedupe keeps the first entry to claim a `row`/`col`
+  slot, which is the positional one only because `emitTables` `put`s it before the
+  header alias. Swap those two `put`s and the picker silently starts handing out
+  alias keys.
+- **`col` is sparse and unbounded.** `assignColumns` gives a cell that matches no
+  band the slot `bands.length + used.size`, so indices can exceed the column count
+  and can arrive out of visual order within a row. Iterate the `cols` array;
+  `0..maxCol` renders phantom columns.
+
+Which row was the header row is *not* recorded, and cannot be inferred safely — a
+data cell in a column the header row did not cover also carries `header: ''`. The
+picker sidesteps the question by rendering every row as a body row and taking its
+column labels from `headers`.
 
 ## Filling
 
@@ -171,10 +198,29 @@ URL, and the only thing `Fill page` acts on.
   form-scoped `[name]`, `:nth-of-type` path), each verified to resolve to exactly
   that one element; the row's text input is `datalist`-backed so the user can type
   their own instead.
-- The key dropdown is grouped — `Fields` for AcroForm entries, `Table N` per table
-  — and each option shows `key — value` so the user picks by what they can see. A
-  saved key that is not in the currently loaded PDF (or when none is loaded) is kept
-  as its own option so re-rendering never loses a mapping.
+- **The key is chosen by pointing at the value, never by typing an address.** A row
+  carries its key in `data-key` and shows a button labelled with what that key
+  resolves to (`T1 · Total · row 3 — 39.80`), with the raw key in the button's
+  `title` — the key is still what gets saved and exported, so it stays inspectable,
+  but it is not what anyone has to read. Clicking the button opens the **picker**,
+  which offers `Fields` as a list and every table as an actual `<table>`: click the
+  cell you can see, in the position you can see it in. Cells hand back the
+  *positional* key, never the header alias, which only headered data cells even have.
+  A saved key the loaded PDF does not contain (or when none is loaded) survives
+  re-rendering as a warn-coloured label, so nothing is lost.
+- The picker **takes over the Config area** rather than floating above it, because
+  `.pfx-panel` is `overflow: hidden` and `.pfx-map-list` scrolls — a popup anchored
+  to a row gets clipped by both. Taking over needs no positioning, no edge-flip and
+  no outside-click handling; do not "improve" it into a popup.
+- Picker details worth keeping: search is **global**, ignoring the active tab and
+  listing each cell once, because people remember a value and not which block it
+  landed in. `Clear` blanks a key without deleting the row — the dropdown's empty
+  option was the only way to park a row, and losing it would have been a
+  regression. Escape and Cancel are non-destructive: `chooseKey` is the one and
+  only writer of `data-key`. Escape also `stopPropagation`s, or it escapes the
+  shadow root into the host page's own handler. Selection is matched on the
+  resolved entry's `table`/`row`/`col`, not on key strings, so an alias-keyed or
+  `__2`-suffixed mapping still highlights.
 - **Mappings are the only input to `Fill page`**, which calls `fillMapped` and
   touches nothing else on the page. It takes `currentRowMappings()` — the rows as
   they stand — not `savedMappings`, so a row can be tried before it is committed
@@ -224,17 +270,30 @@ few of each exercises every branch of `applyValue` — the select and radio path
 particular, which still do option matching.
 
 The round trip is: load `example/test-form.pdf`, open Config, click fields on the
-page, pick each one's key, **Fill page**. **Save** only decides whether those rows
-come back on the next visit — filling works from the rows either way, and skipping
-it should put `Unsaved mappings.` on the status line.
+page, click each row's key button and pick a value out of the picker, **Fill page**.
+**Save** only decides whether those rows come back on the next visit — filling works
+from the rows either way, and skipping it should put `Unsaved mappings.` on the
+status line.
 
 **The invariant is that nothing else moves.** Map two or three inputs, fill, and
 confirm every unmapped input on the page is still exactly as it was. If anything
 the mappings did not name gets a value, a guessing pass has crept back in.
 
+The fixture carries both table shapes on purpose, and the picker must render each
+correctly: **Table 0** is a 2-column label/value block with no headers, so its
+column strip reads `C0`/`C1`; **Table 1** is 4 columns with a real header row, so
+the strip reads `Item`/`Quantity`/`Unit Price`/`Total`. Table 1 also has a title row
+above its header row — both appear as ordinary numbered body rows, which is
+deliberate (see `tablesOf`). Search for `39.80` and it should appear **once**, not
+twice under two keys.
+
 Worth checking alongside it: with no PDF loaded, Config and Fill page are both
 disabled and clicking a form field does nothing; after deleting every row, Fill
-page goes back to disabled without needing a Save first.
+page goes back to disabled without needing a Save first. In the picker, Escape and
+Cancel must leave a key exactly as it was, `Clear` must blank it, and every way out
+of the picker must close it cleanly — deleting the target row, clicking a page field
+(which reveals and flashes the new row), loading a second PDF, closing Config,
+collapsing the panel.
 
 `example/make-test-pdf.mjs` regenerates the fixture (`node example/make-test-pdf.mjs`).
 Edit it rather than hand-patching the PDF.

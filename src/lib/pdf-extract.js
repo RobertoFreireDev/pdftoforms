@@ -2,12 +2,17 @@
  * PDF -> one flat, keyed extraction object.
  *
  * Every AcroForm field and every table cell in the document gets a key. Values
- * carry provenance (page, label, rect) so the Config dropdown can describe them.
+ * carry provenance (page, label, rect) so the Config picker can describe them,
+ * and table cells also carry numeric `table`/`row`/`col` so `tablesOf` can put
+ * the grid back together without parsing key strings.
  *
  * Key shapes:
  *   field.<sanitized field name>              AcroForm field
  *   table.<tableIndex>.r<row>.c<col>          table cell, positional
  *   table.<tableIndex>.<header>.<row>         table cell, by column header
+ *
+ * A headered data cell gets both table shapes — two keys, one cell, positional
+ * emitted first. See `tablesOf`, which is the one place that has to know.
  *
  * Nothing here touches storage or the network. The returned object is handed
  * straight back to the caller and lives only as long as the caller holds it.
@@ -523,4 +528,69 @@ function emitTables(entries, pages, { liberal }) {
       });
     }
   }
+}
+
+/**
+ * The inverse view of what emitTables just wrote: table cells regrouped back
+ * into grids, so the Config picker can show a table as a table instead of
+ * asking anyone to read `table.0.r3.c1`.
+ *
+ * It lives here rather than in the UI because everything it has to undo is a
+ * choice made directly above it:
+ *
+ *  - Every headered data cell was emitted twice, positional key first and the
+ *    header alias second. Object key order is insertion order (no key here is
+ *    integer-like), so taking the *first* entry to claim a row/col slot yields
+ *    the positional one. Change the order of those two `put`s and this breaks.
+ *  - `col` comes from assignColumns, which hands a cell matching no band the
+ *    slot `bands.length + used.size`. Indices are therefore sparse and can run
+ *    past the column count, so callers must iterate `cols`, never `0..maxCol`.
+ *  - Empty cells were dropped, so rows are sparse too.
+ *
+ * @param {Record<string, object>} extraction
+ * @returns {{
+ *   index: number,
+ *   page: number,
+ *   cols: number[],
+ *   headers: Map<number, string>,
+ *   rows: {index: number, cells: Map<number, object>}[],
+ * }[]} ordered by table index; `cols` ascending; `rows` ascending by index.
+ */
+export function tablesOf(extraction) {
+  const byIndex = new Map();
+
+  for (const entry of Object.values(extraction ?? {})) {
+    if (entry?.source !== 'table') continue;
+
+    let table = byIndex.get(entry.table);
+    if (!table) {
+      table = { index: entry.table, page: entry.page, cols: new Set(), headers: new Map(), rows: new Map() };
+      byIndex.set(entry.table, table);
+    }
+
+    let row = table.rows.get(entry.row);
+    if (!row) {
+      row = new Map();
+      table.rows.set(entry.row, row);
+    }
+    // First entry to claim the slot wins, which is the positional one.
+    if (row.has(entry.col)) continue;
+
+    row.set(entry.col, entry);
+    table.cols.add(entry.col);
+    if (entry.header) table.headers.set(entry.col, entry.header);
+  }
+
+  const ascending = (a, b) => a - b;
+  return [...byIndex.values()]
+    .sort((a, b) => a.index - b.index)
+    .map((table) => ({
+      index: table.index,
+      page: table.page,
+      cols: [...table.cols].sort(ascending),
+      headers: table.headers,
+      rows: [...table.rows.keys()]
+        .sort(ascending)
+        .map((index) => ({ index, cells: table.rows.get(index) })),
+    }));
 }

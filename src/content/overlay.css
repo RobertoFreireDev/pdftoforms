@@ -9,6 +9,13 @@
   all: initial;
 }
 
+/* `all: initial` takes the UA's [hidden] rule with it, and several rules below
+   set `display` anyway. One rule at (0,1,1) covers every hideable element here,
+   so nothing new has to remember to bring its own. */
+.pfx-root [hidden] {
+  display: none;
+}
+
 .pfx-root {
   --pfx-bg: #ffffff;
   --pfx-fg: #16181d;
@@ -227,8 +234,9 @@
   outline-offset: 1px;
 }
 
+/* Not `.pfx-map-row button` — that would swallow the delete cross too. */
 .pfx-map-row input,
-.pfx-map-row select {
+.pfx-map-row .pfx-map-key {
   min-width: 0;
   padding: 5px 7px;
   font: inherit;
@@ -237,6 +245,29 @@
   background: var(--pfx-bg);
   border: 1px solid var(--pfx-border);
   border-radius: 4px;
+}
+
+.pfx-map-key {
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pfx-map-key:hover {
+  border-color: var(--pfx-accent);
+}
+
+.pfx-map-key:focus-visible {
+  outline: 2px solid var(--pfx-accent);
+  outline-offset: 1px;
+}
+
+/* A key the loaded PDF does not have. Kept, not dropped — see describeKey. */
+.pfx-map-key[data-orphan] {
+  color: var(--pfx-warn);
+  border-color: var(--pfx-warn);
 }
 
 .pfx-map-del {
@@ -258,4 +289,202 @@
   margin: 10px 0 0;
   font-size: 11px;
   color: var(--pfx-muted);
+}
+
+/* ---------------------------------------------------------- picker */
+
+/* The picker takes over the Config area instead of floating: .pfx-panel is
+   `overflow: hidden` and .pfx-map-list scrolls, so a popup anchored to a row
+   would be clipped by both. Taking over needs no positioning code at all. */
+
+.pfx-picker-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.pfx-picker-title {
+  overflow: hidden;
+  flex: 1;
+  font-size: 11px;
+  color: var(--pfx-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pfx-picker-clear,
+.pfx-picker-cancel {
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--pfx-fg);
+  background: var(--pfx-bg);
+  border: 1px solid var(--pfx-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.pfx-picker-cancel {
+  padding: 3px 7px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.pfx-picker-clear:hover,
+.pfx-picker-cancel:hover {
+  border-color: var(--pfx-accent);
+}
+
+/* No wrapping: a text-only PDF yields one table per text block, so a hundred
+   tabs must scroll rather than push the panel down the viewport. */
+.pfx-picker-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+}
+
+.pfx-picker-tab {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--pfx-fg);
+  white-space: nowrap;
+  background: var(--pfx-bg);
+  border: 1px solid var(--pfx-border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.pfx-picker-tab:hover {
+  border-color: var(--pfx-accent);
+}
+
+.pfx-picker-tab[aria-pressed="true"] {
+  border-color: var(--pfx-accent);
+  box-shadow: inset 0 0 0 1px var(--pfx-accent);
+}
+
+.pfx-picker-filter {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 5px 7px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--pfx-fg);
+  background: var(--pfx-bg);
+  border: 1px solid var(--pfx-border);
+  border-radius: 4px;
+}
+
+/* Capping the body is what keeps the panel inside a short viewport — the panel
+   itself must stay `overflow: hidden`. */
+.pfx-picker-body {
+  max-height: min(260px, 38vh);
+  overflow: auto;
+}
+
+.pfx-picker-empty {
+  margin: 0;
+  padding: 4px 0;
+  font-size: 11px;
+  color: var(--pfx-muted);
+}
+
+.pfx-picker-list button {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 5px 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--pfx-fg);
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--pfx-border);
+  cursor: pointer;
+}
+
+.pfx-picker-list button:hover {
+  background: var(--pfx-border);
+}
+
+/* `separate` on purpose: with `collapse`, Chrome drops the borders of the
+   sticky header and gutter cells as they scroll. */
+.pfx-picker-grid {
+  font-size: 11px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.pfx-picker-grid th,
+.pfx-picker-grid td {
+  max-width: 180px;
+  padding: 3px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-right: 1px solid var(--pfx-border);
+  border-bottom: 1px solid var(--pfx-border);
+}
+
+.pfx-picker-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  color: var(--pfx-muted);
+  background: var(--pfx-bg);
+  cursor: default;
+}
+
+.pfx-picker-grid tbody th {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  color: var(--pfx-muted);
+  background: var(--pfx-bg);
+  cursor: default;
+}
+
+.pfx-picker-grid thead th:first-child {
+  left: 0;
+  z-index: 3;
+}
+
+.pfx-picker-grid td[data-key] {
+  color: var(--pfx-fg);
+  cursor: pointer;
+}
+
+/* A slot no cell landed in. Empty cells are dropped during extraction, so these
+   are real holes in the grid and should not look like something to click. */
+.pfx-cell-blank {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 4px,
+    var(--pfx-border) 4px 5px
+  );
+  opacity: 0.4;
+}
+
+.pfx-picker-grid td[data-key]:hover {
+  background: var(--pfx-border);
+}
+
+/* Outline, not border: a border would shift every other cell in the grid. */
+.pfx-picker-grid td[data-selected],
+.pfx-picker-list button[data-selected] {
+  outline: 2px solid var(--pfx-accent);
+  outline-offset: -2px;
+}
+
+.pfx-picker-body td:focus-visible,
+.pfx-picker-body button:focus-visible {
+  outline: 2px solid var(--pfx-accent);
+  outline-offset: -2px;
 }

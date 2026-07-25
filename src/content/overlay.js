@@ -10,7 +10,7 @@
  * they are CSS selectors and PDF key names, never values.
  */
 
-import { extractPdf } from '../lib/pdf-extract.js';
+import { extractPdf, tablesOf } from '../lib/pdf-extract.js';
 import { fillMapped } from '../lib/autofill.js';
 import {
   importConfig,
@@ -29,6 +29,8 @@ const TOGGLE_SIZE = 30;
 const EDGE = 8;
 /** Input types that are not sensible mapping targets. */
 const UNPICKABLE = new Set(['hidden', 'submit', 'reset', 'button', 'image', 'file', 'password']);
+/** A search this broad is a bad search; say so rather than render thousands of rows. */
+const SEARCH_LIMIT = 200;
 
 function forget() {
   extraction = null;
@@ -87,13 +89,25 @@ function render() {
           <button class="pfx-config-toggle" type="button" aria-expanded="false" disabled>Config</button>
         </div>
         <section class="pfx-config" hidden>
-          <p class="pfx-config-hint"></p>
-          <div class="pfx-map-list"></div>
-          <p class="pfx-map-empty">No mappings for this page yet.</p>
-          <div class="pfx-config-actions">
-            <button class="pfx-map-save" type="button" disabled>Save</button>
-            <button class="pfx-map-export" type="button" disabled>Export</button>
-            <button class="pfx-map-import" type="button">Import</button>
+          <div class="pfx-config-main">
+            <p class="pfx-config-hint"></p>
+            <div class="pfx-map-list"></div>
+            <p class="pfx-map-empty">No mappings for this page yet.</p>
+            <div class="pfx-config-actions">
+              <button class="pfx-map-save" type="button" disabled>Save</button>
+              <button class="pfx-map-export" type="button" disabled>Export</button>
+              <button class="pfx-map-import" type="button">Import</button>
+            </div>
+          </div>
+          <div class="pfx-picker" role="group" aria-label="Choose a PDF value" hidden>
+            <div class="pfx-picker-head">
+              <span class="pfx-picker-title"></span>
+              <button class="pfx-picker-clear" type="button">Clear</button>
+              <button class="pfx-picker-cancel" type="button" aria-label="Cancel">×</button>
+            </div>
+            <div class="pfx-picker-tabs" role="group" aria-label="Value source"></div>
+            <input class="pfx-picker-filter" type="search" placeholder="Search values…" spellcheck="false">
+            <div class="pfx-picker-body"></div>
           </div>
         </section>
         <p class="pfx-note">PDF contents stay in this tab's memory only.</p>
@@ -124,9 +138,15 @@ async function wire(shadow, host) {
   const saveButton = $('.pfx-map-save');
   const exportButton = $('.pfx-map-export');
   const config = $('.pfx-config');
+  const configMain = $('.pfx-config-main');
   const configHint = $('.pfx-config-hint');
   const mapList = $('.pfx-map-list');
   const mapEmpty = $('.pfx-map-empty');
+  const picker = $('.pfx-picker');
+  const pickerTitle = $('.pfx-picker-title');
+  const pickerTabs = $('.pfx-picker-tabs');
+  const pickerFilter = $('.pfx-picker-filter');
+  const pickerBody = $('.pfx-picker-body');
 
   /** Mappings as last committed to storage — what the rows are restored from. */
   let savedMappings = [];
@@ -265,20 +285,25 @@ async function wire(shadow, host) {
     if (!file) return;
 
     setStatus(`Reading ${file.name}…`);
-    // The previous PDF is stale the moment another one is chosen.
+    // The previous PDF is stale the moment another one is chosen, and so is
+    // anything the picker is showing from it.
+    closePicker();
     forget();
+    tablesCache = null;
     setLoaded();
 
     try {
       const buffer = await file.arrayBuffer();
       extraction = await extractPdf(buffer);
+      tablesCache = null;
       const counts = summarize(extraction);
       setStatus(`${counts.total} values from ${file.name} (${counts.fields} fields, ${counts.cells} table cells).`, 'ok');
       setLoaded();
       // Loading no longer fills anything; it only makes values available.
-      refreshKeyOptions();
+      relabelRowKeys();
     } catch (err) {
       forget();
+      tablesCache = null;
       setLoaded();
       setStatus(`Could not read that PDF: ${err?.message ?? err}`, 'error');
       console.error('[pdftoformext] extraction failed:', err);
@@ -310,55 +335,31 @@ async function wire(shadow, host) {
     return rows()
       .map((row) => ({
         selector: row.querySelector('.pfx-map-selector').value.trim(),
-        key: row.querySelector('.pfx-map-key').value,
+        key: row.dataset.key ?? '',
       }))
       .filter((entry) => entry.selector && entry.key);
   }
 
-  /** Rebuilds one row's key dropdown, keeping whatever it already points at. */
-  function fillKeyOptions(select, wanted = select.value) {
-    select.replaceChildren();
-    select.append(new Option('— PDF value —', ''));
-
-    const entries = Object.values(extraction ?? {});
-    const fields = entries.filter((entry) => entry.source === 'acroform');
-    const tables = new Map();
-    for (const entry of entries) {
-      if (entry.source !== 'table') continue;
-      const bucket = tables.get(entry.table) ?? [];
-      bucket.push(entry);
-      tables.set(entry.table, bucket);
-    }
-
-    const group = (label, list) => {
-      if (!list.length) return;
-      const optgroup = document.createElement('optgroup');
-      optgroup.label = label;
-      for (const entry of list) {
-        const option = new Option(`${entry.key} — ${truncate(String(entry.value ?? ''), 36)}`, entry.key);
-        optgroup.append(option);
-      }
-      select.append(optgroup);
-    };
-
-    group('Fields', fields);
-    for (const [index, cells] of [...tables.entries()].sort((a, b) => a[0] - b[0])) {
-      group(`Table ${index}`, cells);
-    }
-
-    // A mapping saved against a PDF that is not loaded right now must survive
-    // being re-rendered, so keep its key as an option of its own.
-    if (wanted && !extraction?.[wanted]) {
-      const orphan = document.createElement('optgroup');
-      orphan.label = 'Saved';
-      orphan.append(new Option(`${wanted} — (not in loaded PDF)`, wanted));
-      select.append(orphan);
-    }
-    select.value = wanted ?? '';
+  /**
+   * Points a row at a key. The key itself lives on the row's dataset — the
+   * button only shows what it resolves to, since a key is the thing nobody can
+   * read and the value is the thing everybody can.
+   */
+  function setRowKey(row, key) {
+    row.dataset.key = key ?? '';
+    const { text, known } = describeKey(extraction, row.dataset.key);
+    const button = row.querySelector('.pfx-map-key');
+    button.textContent = text;
+    // The raw key is what gets saved and exported, so keep it inspectable now
+    // that it is no longer the visible text.
+    button.title = row.dataset.key || 'Choose a value from the PDF';
+    button.toggleAttribute('data-orphan', !known);
+    refreshControls();
   }
 
-  function refreshKeyOptions() {
-    for (const row of rows()) fillKeyOptions(row.querySelector('.pfx-map-key'));
+  /** A newly loaded PDF can resolve keys that were only names a moment ago. */
+  function relabelRowKeys() {
+    for (const row of rows()) setRowKey(row, row.dataset.key ?? '');
   }
 
   function addRow({ selector = '', key = '', candidates = [] } = {}) {
@@ -368,7 +369,7 @@ async function wire(shadow, host) {
     row.innerHTML = `
       <input class="pfx-map-selector" type="text" list="${listId}" placeholder="CSS selector" spellcheck="false">
       <datalist id="${listId}"></datalist>
-      <select class="pfx-map-key"></select>
+      <button class="pfx-map-key" type="button" aria-haspopup="true" aria-expanded="false"></button>
       <button class="pfx-map-del" type="button" aria-label="Delete mapping">×</button>
     `;
 
@@ -376,11 +377,12 @@ async function wire(shadow, host) {
     selectorInput.value = selector;
 
     setCandidates(row, candidates);
-    fillKeyOptions(row.querySelector('.pfx-map-key'), key);
+    setRowKey(row, key);
 
     selectorInput.addEventListener('input', refreshControls);
-    row.querySelector('.pfx-map-key').addEventListener('change', refreshControls);
+    row.querySelector('.pfx-map-key').addEventListener('click', () => openPicker(row));
     row.querySelector('.pfx-map-del').addEventListener('click', () => {
+      if (pickerRow === row) closePicker();
       row.remove();
       updateEmptyState();
       refreshControls();
@@ -408,10 +410,262 @@ async function wire(shadow, host) {
   }
 
   function renderRows(list) {
+    // Every row is about to be replaced, so a picker still open would be
+    // pointing at a detached one.
+    closePicker();
     mapList.replaceChildren();
     for (const { selector, key } of list) addRow({ selector, key });
     updateEmptyState();
   }
+
+  /* ---------------------------------------------------- value picker */
+
+  /** The row the picker is choosing for, or null when it is closed. */
+  let pickerRow = null;
+  /** 'fields', or a table index. */
+  let pickerTab = 'fields';
+  /** tablesOf() is pure and the PDF does not change under us; rebuild per load. */
+  let tablesCache = null;
+
+  const tables = () => (tablesCache ??= tablesOf(extraction ?? {}));
+  const acroFields = () => Object.values(extraction ?? {}).filter((e) => e.source === 'acroform');
+
+  /**
+   * Everything the picker can offer, each table cell exactly once — searching
+   * the raw extraction object would list every headered cell twice, under both
+   * of its keys, which is the noise the grid exists to get rid of.
+   */
+  const allValues = () => [
+    ...acroFields(),
+    ...tables().flatMap((table) => table.rows.flatMap((row) => [...row.cells.values()])),
+  ];
+
+  /** Open on whichever tab already holds the row's key, so it can be seen in place. */
+  function defaultTabFor(key) {
+    const entry = extraction?.[key];
+    if (entry?.source === 'table') return entry.table;
+    if (acroFields().length) return 'fields';
+    return tables()[0]?.index ?? 'fields';
+  }
+
+  function openPicker(row) {
+    // Same rule as Config itself: without a PDF there is nothing to pick.
+    if (!extraction) return;
+    pickerRow = row;
+    pickerFilter.value = '';
+    pickerTab = defaultTabFor(row.dataset.key);
+    row.querySelector('.pfx-map-key').setAttribute('aria-expanded', 'true');
+    configMain.hidden = true;
+    picker.hidden = false;
+    renderPicker();
+    pickerFilter.focus();
+  }
+
+  function closePicker() {
+    if (picker.hidden) return;
+    picker.hidden = true;
+    configMain.hidden = false;
+    const button = pickerRow?.querySelector('.pfx-map-key');
+    pickerRow = null;
+    button?.setAttribute('aria-expanded', 'false');
+    // Only chase the focus back if there is something visible to chase it to.
+    if (button?.isConnected && !panel.hidden && !config.hidden) button.focus();
+  }
+
+  /** The one and only place the picker writes a key. Cancelling must not. */
+  function chooseKey(key) {
+    const row = pickerRow;
+    if (!row) return;
+    setRowKey(row, key);
+    closePicker();
+    row.classList.add('pfx-map-row-flash');
+    setTimeout(() => row.classList.remove('pfx-map-row-flash'), 600);
+  }
+
+  function renderPicker() {
+    const selector = pickerRow?.querySelector('.pfx-map-selector').value.trim();
+    pickerTitle.textContent = selector ? `Value for ${truncate(selector, 44)}` : 'Choose a PDF value';
+
+    renderPickerTabs();
+
+    const query = pickerFilter.value.trim().toLowerCase();
+    if (query) {
+      // Searching is deliberately global, ignoring the tab: people remember the
+      // value, not which block of the page it landed in.
+      const matches = allValues().filter((entry) => matchesQuery(entry, query));
+      pickerBody.replaceChildren(renderEntryList(matches, `Nothing matches “${pickerFilter.value.trim()}”.`));
+      return;
+    }
+
+    // A PDF can extract to nothing at all — a scanned page with no text layer.
+    const empty = allValues().length ? 'This PDF has no form fields.' : 'This PDF has no extractable values.';
+    const table = pickerTab === 'fields' ? null : tables().find((entry) => entry.index === pickerTab);
+    pickerBody.replaceChildren(
+      table ? renderGrid(table) : renderEntryList(pickerTab === 'fields' ? acroFields() : [], empty),
+    );
+  }
+
+  function renderPickerTabs() {
+    const groups = [];
+    if (acroFields().length) groups.push({ id: 'fields', label: 'Fields' });
+    for (const table of tables()) groups.push({ id: table.index, label: `Table ${table.index} · p${table.page}` });
+
+    // One group is not a choice, and no groups is an empty PDF.
+    pickerTabs.hidden = groups.length < 2;
+    const fragment = document.createDocumentFragment();
+    for (const { id, label } of groups) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pfx-picker-tab';
+      button.dataset.tab = String(id);
+      button.setAttribute('aria-pressed', String(id === pickerTab));
+      button.textContent = label;
+      fragment.append(button);
+    }
+    pickerTabs.replaceChildren(fragment);
+  }
+
+  /** Flat list of entries — the Fields tab, and every search result. */
+  function renderEntryList(entries, emptyText) {
+    const fragment = document.createDocumentFragment();
+    if (!entries.length) {
+      const empty = document.createElement('p');
+      empty.className = 'pfx-picker-empty';
+      empty.textContent = emptyText;
+      fragment.append(empty);
+      return fragment;
+    }
+
+    const list = document.createElement('div');
+    list.className = 'pfx-picker-list';
+    for (const entry of entries.slice(0, SEARCH_LIMIT)) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.key = entry.key;
+      button.title = entry.key;
+      if (entry.key === pickerRow?.dataset.key) button.dataset.selected = '';
+      button.textContent = describeEntry(entry);
+      list.append(button);
+    }
+    fragment.append(list);
+
+    if (entries.length > SEARCH_LIMIT) {
+      const note = document.createElement('p');
+      note.className = 'pfx-picker-empty';
+      note.textContent = `Showing the first ${SEARCH_LIMIT} of ${entries.length} — narrow the search.`;
+      fragment.append(note);
+    }
+    return fragment;
+  }
+
+  /**
+   * A table, as a table. Every row of the grid is rendered as a body row,
+   * including the one the header text came from: which row that was is not
+   * recorded, its cells are real keys somebody may want, and the sticky label
+   * strip above already says what each column means.
+   */
+  function renderGrid(table) {
+    const selected = extraction?.[pickerRow?.dataset.key ?? ''];
+    const isSelected = (entry) => selected?.source === 'table'
+      && selected.table === entry.table
+      && selected.row === entry.row
+      && selected.col === entry.col;
+
+    const grid = document.createElement('table');
+    grid.className = 'pfx-picker-grid';
+
+    const head = grid.createTHead().insertRow();
+    head.append(document.createElement('th')); // corner, above the row gutter
+    for (const col of table.cols) {
+      const th = document.createElement('th');
+      th.scope = 'col';
+      th.textContent = table.headers.get(col) ?? `C${col}`;
+      th.title = th.textContent;
+      head.append(th);
+    }
+
+    const body = grid.createTBody();
+    let roved = false;
+    for (const { index, cells } of table.rows) {
+      const tr = body.insertRow();
+      const gutter = document.createElement('th');
+      gutter.scope = 'row';
+      gutter.textContent = String(index);
+      tr.append(gutter);
+
+      for (const col of table.cols) {
+        const td = tr.insertCell();
+        const entry = cells.get(col);
+        if (!entry) {
+          td.className = 'pfx-cell-blank';
+          continue;
+        }
+        td.dataset.key = entry.key;
+        td.title = String(entry.value ?? '');
+        td.textContent = td.title;
+        if (isSelected(entry)) {
+          td.dataset.selected = '';
+          td.tabIndex = 0;
+          roved = true;
+        } else {
+          td.tabIndex = -1;
+        }
+      }
+    }
+
+    // Exactly one cell is tabbable; the arrow keys move which one.
+    if (!roved) {
+      const first = body.querySelector('td[data-key]');
+      if (first) first.tabIndex = 0;
+    }
+    return grid;
+  }
+
+  pickerFilter.addEventListener('input', renderPicker);
+
+  pickerTabs.addEventListener('click', (event) => {
+    const tab = event.target.closest('.pfx-picker-tab');
+    if (!tab) return;
+    pickerTab = tab.dataset.tab === 'fields' ? 'fields' : Number(tab.dataset.tab);
+    renderPicker();
+  });
+
+  // One listener, not one per cell: a full-page table is easily 900 of them.
+  pickerBody.addEventListener('click', (event) => {
+    const target = event.target.closest('[data-key]');
+    if (target) chooseKey(target.dataset.key);
+  });
+
+  // Blanking a key parks a row without deleting it — the empty option of the
+  // dropdown this replaced was the only way to do that.
+  $('.pfx-picker-clear').addEventListener('click', () => chooseKey(''));
+  $('.pfx-picker-cancel').addEventListener('click', () => closePicker());
+
+  picker.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      // The host page may have an Escape handler of its own; this one is not for it.
+      event.stopPropagation();
+      closePicker();
+      return;
+    }
+
+    const cell = event.target.closest?.('td[data-key]');
+    if (!cell) return;
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      chooseKey(cell.dataset.key);
+      return;
+    }
+
+    const next = neighbourCell(cell, event.key);
+    if (!next) return;
+    event.preventDefault();
+    cell.tabIndex = -1;
+    next.tabIndex = 0;
+    next.focus();
+  });
 
   /* ------------------------------------------------------ pick mode */
 
@@ -444,6 +698,10 @@ async function wire(shadow, host) {
     event.preventDefault();
     event.stopPropagation();
 
+    // The map list is hidden while the picker is up, so the row about to be
+    // added and flashed would be added and flashed out of sight.
+    closePicker();
+
     const candidates = selectorsFor(el);
     const existing = rows().find((row) => {
       const value = row.querySelector('.pfx-map-selector').value.trim();
@@ -462,6 +720,7 @@ async function wire(shadow, host) {
   function openConfig(open) {
     // Mapping means picking a PDF key; without a PDF there is nothing to pick.
     if (open && !extraction) return;
+    if (!open) closePicker();
 
     config.hidden = !open;
     configButton.setAttribute('aria-expanded', String(open));
@@ -560,6 +819,58 @@ function sameMappings(a, b) {
 
 function truncate(text, max) {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+/** One line naming what an entry is, in the terms the PDF shows it in. */
+function describeEntry(entry) {
+  const value = truncate(String(entry.value ?? ''), 48);
+  if (entry.source === 'table') {
+    return `T${entry.table} · ${entry.header || `C${entry.col}`} · row ${entry.row} — ${value}`;
+  }
+  return `${entry.label || entry.name || entry.key} — ${value}`;
+}
+
+/** Button text for a key, and whether the loaded PDF actually has it. */
+function describeKey(extracted, key) {
+  if (!key) return { text: '— PDF value —', known: true };
+  const entry = extracted?.[key];
+  if (entry) return { text: describeEntry(entry), known: true };
+  // A mapping saved against a PDF that is not loaded right now must survive.
+  return { text: `${key} — (not in loaded PDF)`, known: false };
+}
+
+function matchesQuery(entry, needle) {
+  return [entry.key, entry.label, entry.header, entry.name, entry.value]
+    .some((field) => field != null && String(field).toLowerCase().includes(needle));
+}
+
+/**
+ * The cell an arrow key from `cell` lands on. Empty slots are real `<td>`s with
+ * no key, so both axes step over them rather than stopping on a dead cell.
+ */
+function neighbourCell(cell, key) {
+  const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -1, ArrowDown: 1 }[key];
+  if (step === undefined) return null;
+  const back = step < 0;
+  const sideways = key === 'ArrowLeft' || key === 'ArrowRight';
+
+  if (sideways) {
+    let next = cell;
+    while ((next = back ? next.previousElementSibling : next.nextElementSibling)) {
+      if (next.dataset.key !== undefined) return next;
+    }
+    return null;
+  }
+
+  // cellIndex counts the row-number <th> too, and every row has one, so the
+  // same index is the same column on every row.
+  const column = cell.cellIndex;
+  let row = cell.parentElement;
+  while ((row = back ? row.previousElementSibling : row.nextElementSibling)) {
+    const candidate = row.cells[column];
+    if (candidate?.dataset.key !== undefined) return candidate;
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ *
