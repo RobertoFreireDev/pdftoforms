@@ -1,0 +1,34 @@
+/* The frame is one editor and nothing else, so the editor is the page.
+   The palette repeats overlay.css's variables so the frame does not read as a
+   foreign box dropped into the panel. */
+
+:root {
+  --pfx-bg: #ffffff;
+  --pfx-border: #d4d4d8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pfx-bg: #1c1c1e;
+    --pfx-border: #3f3f46;
+  }
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--pfx-bg);
+}
+
+#editor {
+  width: 100%;
+  height: 100%;
+}
+
+/* Ace's own gutter/background win inside the editor; this only covers the sliver
+   before a theme has been applied. */
+.ace_editor {
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}

@@ -1,8 +1,9 @@
 /**
  * Per-URL field mappings: "this CSS selector on this page gets that PDF key".
  *
- * What is stored is deliberately thin: selectors, PDF *key names*, and the
- * overlay button's position. No extracted value ever reaches storage — the PDF's
+ * What is stored is deliberately thin: selectors, PDF *key names*, the overlay
+ * button's position, and the Config script (code the user wrote, never anything
+ * the PDF said). No extracted value ever reaches storage — the PDF's
  * contents stay in the content script's memory, exactly as before. Storage is
  * `chrome.storage.local` rather than the page's `localStorage` precisely because
  * the host page can read and clear the latter.
@@ -62,23 +63,31 @@ export async function saveAll(config) {
   }
 }
 
-/** @returns {{mappings: {selector: string, key: string}[], toggle: {x: number, y: number} | null}} */
+/**
+ * @returns {{
+ *   mappings: {selector: string, key: string}[],
+ *   toggle: {x: number, y: number} | null,
+ *   script: string,
+ * }}
+ */
 export async function loadSite(key = siteKey()) {
   const config = await loadAll();
   const site = config.sites?.[key] ?? {};
   return {
     mappings: Array.isArray(site.mappings) ? site.mappings.filter(isMapping) : [],
     toggle: isPoint(site.toggle) ? site.toggle : null,
+    script: typeof site.script === 'string' ? site.script : '',
   };
 }
 
-/** Shallow-merges `{mappings}` and/or `{toggle}`, leaving other sites alone. */
+/** Shallow-merges `{mappings}`, `{toggle}` and/or `{script}`, leaving other sites alone. */
 export async function saveSite(patch, key = siteKey()) {
   const config = await loadAll();
   const site = { ...(config.sites?.[key] ?? {}) };
 
   if (patch.mappings) site.mappings = patch.mappings.filter(isMapping);
   if (patch.toggle !== undefined) site.toggle = patch.toggle;
+  if (patch.script !== undefined) site.script = String(patch.script ?? '');
 
   config.sites = { ...config.sites, [key]: site };
   return saveAll(config);
@@ -111,10 +120,14 @@ export function validateConfig(raw) {
     const mappings = Array.isArray(site.mappings) ? site.mappings.filter(isMapping) : [];
     const clean = { mappings };
     if (isPoint(site.toggle)) clean.toggle = site.toggle;
+    if (typeof site.script === 'string' && site.script) clean.script = site.script;
     sites[key] = clean;
   }
 
-  if (!Object.keys(sites).length) throw new Error('file contains no mappings');
+  // A site carrying only a script is still worth moving between machines.
+  if (!Object.values(sites).some((site) => site.mappings.length || site.script)) {
+    throw new Error('file contains no mappings');
+  }
   return { version: VERSION, sites };
 }
 

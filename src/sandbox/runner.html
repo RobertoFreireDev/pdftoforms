@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!--
+  Sandboxed extension page: the JS editor and the evaluator.
+
+  It lives here rather than in the overlay's shadow root because `eval` and
+  `new Function` are blocked in MV3 content-script isolated worlds. A sandboxed
+  page carries its own CSP (see manifest.json), which is the supported way to run
+  code strings. `allow-scripts` without `allow-same-origin` gives this page an
+  opaque origin: no chrome.* APIs, no storage, no reach into the host page — and
+  `connect-src 'none'` means a user script cannot get to the network either.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>pdftoformext script editor</title>
+    <link rel="stylesheet" href="runner.css">
+  </head>
+  <body>
+    <div id="editor"></div>
+
+    <!-- Mode and themes are loaded up front rather than fetched on demand, so
+         Ace never has to resolve a basePath from inside a sandboxed frame. -->
+    <script src="../../vendor/ace/ace.js"></script>
+    <script src="../../vendor/ace/mode-javascript.js"></script>
+    <script src="../../vendor/ace/theme-textmate.js"></script>
+    <script src="../../vendor/ace/theme-tomorrow_night.js"></script>
+    <script src="runner.js"></script>
+  </body>
+</html>

@@ -8,8 +8,9 @@ mappings the user configured, and only those.
 ## Status
 
 Implemented and working end to end: overlay, extraction (AcroForm + geometric
-tables), mapping-driven fill, and per-URL field mapping. pdf.js 4.6.82 is
-vendored. Update this file as pieces change.
+tables), mapping-driven fill, per-URL field mapping, and the Config script
+section. pdf.js 4.6.82 and Ace 1.44.0 are vendored. Update this file as pieces
+change.
 
 ## Core flow
 
@@ -36,8 +37,9 @@ when it can do something:
 | Load PDF… / Import | always |
 | Config | a PDF is loaded (a mapping picks a PDF key; with no PDF there is none to pick) |
 | Fill page | a PDF is loaded and ≥1 row on screen has both selector and key (Config open or closed) |
-| Save | a row has both selector and key, **or** there are saved mappings to clear |
-| Export | some stored site has ≥1 mapping |
+| Run (Script) | a PDF is loaded and the sandboxed editor frame has handed back its port |
+| Save | a row has both selector and key, **or** there are saved mappings to clear, **or** the script differs from the saved one |
+| Export | some stored site has ≥1 mapping or a script |
 
 `refreshControls()` in `overlay.js` owns all of it and is called from every place
 that can change those conditions; `refreshExportState()` is separate only because
@@ -56,19 +58,34 @@ src/
     pdf-extract.js          PDF -> keyed object (fields + tables)
     autofill.js             keyed object -> page inputs, by mapping only
     mappings.js             per-URL selector->key config; storage + selector building
+  sandbox/
+    runner.html             sandboxed extension page: the JS editor and evaluator
+    runner.js               Ace setup, the MessagePort protocol, the example script
+    runner.css              editor chrome; repeats overlay.css's palette
 vendor/
   pdf.mjs                   pdf.js, vendored locally (MV3 CSP forbids remote scripts)
   pdf.worker.mjs
   LICENSE                   Apache 2.0, pdf.js
+  ace/                      Ace 1.44.0, src-min-noconflict
+    ace.js                  core; also carries the textmate theme's CSS module
+    mode-javascript.js      loaded up front, so Ace never resolves a basePath
+    theme-textmate.js       light
+    theme-tomorrow_night.js dark
+    LICENSE                 BSD-3-Clause, Ace
 example/
   test-form.html            standalone page with fields, for manual testing
   test-form.pdf             fixture to fill from (AcroForm + two table shapes)
 ```
 
 `bootstrap.js` exists because MV3 `content_scripts` cannot declare
-`"type": "module"`. It is the only classic script; everything it pulls in is a
-plain ES module, so every file under `src/` and `vendor/` that gets imported must
-also be listed in `web_accessible_resources`.
+`"type": "module"`. It is the only classic script *in the content world*;
+everything it pulls in is a plain ES module, so every file under `src/` and
+`vendor/` that gets imported must also be listed in `web_accessible_resources`.
+
+`src/sandbox/` is the exception to all of that: it is a real extension page, not
+content-script code, so it loads classic `<script src>` tags and its
+sub-resources need no `web_accessible_resources` entry — only `runner.html`
+does, because the content script frames it from a web page.
 
 No build step. Plain ES modules loaded directly by the extension — do not
 introduce bundlers, TypeScript, or npm dependencies without being asked.
@@ -229,33 +246,122 @@ URL, and the only thing `Fill page` acts on.
   `Unsaved mappings.` rather than letting that pass silently.
 - **Save** stays enabled when the row list is empty but the page *has* saved
   mappings — deleting every row and saving is how a page's mappings get cleared.
-  **Export** is disabled unless some stored site has a mapping; note that a site
-  entry can exist holding only a toggle position (dragging the button writes one),
-  so it counts mappings, not sites.
+  **Export** is disabled unless some stored site has a mapping or a script; note
+  that a site entry can exist holding only a toggle position (dragging the button
+  writes one), so it counts content, not sites.
 - Storage is one `chrome.storage.local` key, `pdftoformext.config`:
-  `{version, sites: {"<origin><pathname>": {mappings: [{selector, key}], toggle: {x, y}}}}`.
+  `{version, sites: {"<origin><pathname>": {mappings: [{selector, key}], toggle: {x, y}, script}}}`.
   Query and hash are deliberately excluded from the site key. Export/Import move the
   whole file; import replaces the site groups it contains and leaves the rest.
+  `script` is additive, so `VERSION` stayed at 1 — an old config simply has none.
 - `chrome.storage` failures degrade to an in-memory config rather than throwing —
   the overlay must still work on a page where storage is unreachable.
+
+## The Script section
+
+The first thing in Config, collapsed by default: an Ace editor for JS, a console,
+and **Run**, which rewrites the extraction object. It exists because a mapping can
+only *point at* a value — it cannot strip a `$`, join two fields, split a date or
+mint a key the PDF does not contain.
+
+**Run is idempotent by construction.** `extraction = clone(pristine)` happens
+first and unconditionally, so a script always sees the PDF as pdf.js produced it,
+never as its own last run left it. `pristine` is taken with `clone()` (JSON round
+trip — every entry field is JSON-safe) in the Load PDF handler and cleared by
+`forget()` alongside `extraction`; it is subject to every rule `extraction` is.
+Since the restore happens before the code runs, a failed or hung script leaves the
+PDF at its original values rather than half-edited.
+
+### Why it is an iframe
+
+`eval` and `new Function` are **blocked in an MV3 content script's isolated
+world**. `content_security_policy.isolated_world` would lift that but is not in
+shipping Chrome. A **sandboxed extension page** carries its own CSP and is the
+supported way to run a code string, so the editor and the evaluator both live in
+`src/sandbox/runner.html`, framed from `web_accessible_resources` (which is exempt
+from the host page's `frame-src`). Do not try to move evaluation back into the
+overlay — it cannot work there.
+
+The sandbox earns its keep three more times over: Ace is a classic script and
+loads on a real extension page with no ESM wrapper and no
+`renderer.attachToShadowRoot()`; the frame has an opaque origin, so a user script
+reaches no `chrome.*`, no storage and no host-page DOM; and `connect-src 'none'`
+in the sandbox CSP makes the extension's no-network promise browser-enforced even
+for code the user wrote themselves.
+
+### The wire is a MessagePort, not the window
+
+The frame sits in the **host page's** DOM, so its `window.parent` is a window the
+page shares with the content script — anything posted there is readable by the
+page, and *PDF contents travel this wire*. Only the frame's contentless
+`pfx-ready` ping uses the window; the overlay answers by transferring a
+`MessageChannel` port into the frame, and everything after that is private. Moving
+any of it back onto `parent.postMessage` would leak the PDF to the page.
+
+`event.source === jsFrame.contentWindow` is what authenticates the ping — the
+browser sets `source`, so the page cannot forge it. The page *can* race a port of
+its own into the frame, which only cuts itself off from the overlay's runs; it
+never sees them.
+
+| Direction | Message |
+|---|---|
+| frame → overlay | `{type:'pfx-ready'}` — over the window, carries nothing |
+| overlay → frame | `{type:'pfx-port'}` with the transferred port |
+| overlay → frame | `{type:'pfx-init', code}` — `null` means show `DEFAULT_SCRIPT` |
+| frame → overlay | `{type:'pfx-change', code}`, debounced 250 ms |
+| overlay → frame | `{type:'pfx-run', id, pdf}` |
+| frame → overlay | `{type:'pfx-result', id, pdf, logs, error, ms}` |
+| overlay → frame | `{type:'pfx-resize'}` |
+
+### Details that are not obvious from the code
+
+- The frame is created **lazily**, on first expand — ~1 MB of editor is not worth
+  loading on every page. It keeps its document across collapse, the picker
+  takeover and panel close, because `display: none` does not reload an iframe.
+  Ace does mis-measure after any of those, which is what `remeasureEditor()` is
+  for; it is called from `openScript`, `openConfig`, `openPanel` and `closePicker`.
+- The section is the **first child of `.pfx-config-main`**, not a sibling, so the
+  picker's takeover hides it too.
+- `pfx-init` sets the editor through a `seeding` flag that suppresses the change
+  notification. Without it, merely opening the section would report the boilerplate
+  as an edit — lighting Save and the "saved script" dot for something nobody typed.
+- Ace's syntax **worker is off** (`setUseWorker(false)`): it would need its own URL
+  under an opaque origin, and syntax errors reach the console on Run anyway. That
+  is why `worker-javascript.js` is not vendored.
+- `normalise()` re-files every returned entry so `entry.key` matches its map key,
+  because `tablesOf`, the picker and `fillMapped` all assume it and a hand-built
+  entry easily breaks it. It repairs and reports rather than rejecting.
+- A run that does not answer within `RUN_TIMEOUT` (5 s) is ended by **replacing the
+  iframe element**, not by re-`src`-ing it — a frame stuck mid-loop cannot be
+  navigated, but it can be detached. The editor's text is restored from
+  `scriptText`, which is why the debounced `pfx-change` mirror exists.
+- The script is committed by the existing **Save** button, in the same `saveSite`
+  call as the mappings, and is **never auto-run** on load. It is code the user
+  wrote, not anything the PDF said, so storing it does not touch the privacy rule.
 
 ## Constraints
 
 - **Memory only.** No persistence of PDF *contents* anywhere, by any mechanism. This
   is the central privacy property of the extension — treat any change that persists
   extracted data as a bug. The mapping config is the one thing that is stored, and
-  it holds only CSS selectors, PDF **key names** and the button's position. If you
-  ever find yourself writing an entry's `value` to storage, that is the bug.
-- **No network.** The PDF is never uploaded; pdf.js is vendored, not fetched from a
-  CDN. The single `fetch` in the codebase reads the extension's own
-  `overlay.css` over `chrome-extension://`.
+  it holds only CSS selectors, PDF **key names**, the button's position and the
+  user's own script. `pristine` is under the same rule as `extraction`: a second
+  in-memory copy, dropped by the same `forget()`. If you ever find yourself writing
+  an entry's `value` to storage, that is the bug.
+- **No network.** The PDF is never uploaded; pdf.js and Ace are vendored, not
+  fetched from a CDN. The single `fetch` in the codebase reads the extension's own
+  `overlay.css` over `chrome-extension://`. User scripts cannot break this: the
+  sandbox CSP's `connect-src 'none'` blocks `fetch`, XHR, WebSocket and
+  `sendBeacon` from the one place arbitrary code runs.
 - Overlay must not break host pages: shadow DOM or a heavily namespaced class
   prefix, and a `z-index` high enough to sit above typical page chrome.
 - The manifest requests **`storage` and nothing else** — no `host_permissions`, no
   optional permissions. `storage` buys the per-URL mappings; `chrome.storage.local`
   rather than the page's `localStorage` precisely because the host page can read and
   clear the latter. Keeping the list at exactly one entry is what makes the privacy
-  claim checkable at a glance, so do not add to it casually.
+  claim checkable at a glance, so do not add to it casually. The `sandbox` and
+  `content_security_policy` keys the script section added are not permissions and
+  do not widen that list.
 - Parsing runs in a real pdf.js worker where the host page's CSP allows one, and
   silently retries on the main thread ("fake worker") where it does not. Both
   paths are local; neither touches the network.
@@ -293,6 +399,29 @@ Cancel must leave a key exactly as it was, `Clear` must blank it, and every way 
 of the picker must close it cleanly — deleting the target row, clicking a page field
 (which reveals and flashes the new row), loading a second PDF, closing Config,
 collapsing the panel.
+
+For the script section, the tests that actually catch regressions:
+
+- **Idempotence.** `pdf['field.applicant_name'].value += '!'` and press Run five
+  times. Exactly one `!` every time. This is the restore-from-`pristine` contract,
+  and it is the first thing to break if the restore is moved or made conditional.
+- **No-op.** Run the untouched boilerplate: `0 changed, 0 added, 0 removed`, and a
+  subsequent Fill page behaves as if no script existed.
+- **Table reshape.** Strip `$` from every cell of table 1 and Run; the picker must
+  still draw Table 1 as 4 columns under `Item/Quantity/Unit Price/Total`, and
+  `39.80` must still be found once.
+- **Failure leaves nothing behind.** `pdf.nope.value = 1;` → the error is in the
+  console, the status line says the PDF is unchanged, and the picker still shows
+  original values. `while (true) {}` → stopped after 5 s with the panel and the
+  host page both still responsive, and the editor still holding the code.
+- **No network.** `fetch('https://example.com')` must be refused by the sandbox CSP
+  with nothing on the wire.
+- **Nothing typed, nothing saved.** Open the section and press Save without editing:
+  the boilerplate must not be stored, and the toggle's dot must not appear. Then
+  edit, Save, reload — the script comes back, collapsed, and has *not* run.
+- **Frame survives.** Expanded, open and cancel the picker, collapse and reopen
+  Config, collapse and reopen the panel: the editor comes back correctly sized
+  every time rather than as a 0-height strip.
 
 Loading the extension: `chrome://extensions` → Developer mode → Load unpacked →
 select this directory.

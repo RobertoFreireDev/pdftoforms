@@ -5,6 +5,12 @@
   "description": "Load a PDF, extract every field and table from it in memory, and autofill the form on the current page.",
   "minimum_chrome_version": "119",
   "permissions": ["storage"],
+  "sandbox": {
+    "pages": ["src/sandbox/runner.html"]
+  },
+  "content_security_policy": {
+    "sandbox": "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'none'; child-src 'none'; form-action 'none';"
+  },
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*", "file://*/*"],
@@ -21,6 +27,7 @@
         "src/lib/pdf-extract.js",
         "src/lib/autofill.js",
         "src/lib/mappings.js",
+        "src/sandbox/runner.html",
         "vendor/pdf.mjs",
         "vendor/pdf.worker.mjs"
       ],

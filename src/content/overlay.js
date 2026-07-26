@@ -7,7 +7,7 @@
  * bug — it is the whole privacy story of this extension.
  *
  * Field *mappings* are a different thing and do persist (see lib/mappings.js):
- * they are CSS selectors and PDF key names, never values.
+ * they are CSS selectors, PDF key names and the Config script, never values.
  */
 
 import { extractPdf, tablesOf } from '../lib/pdf-extract.js';
@@ -24,6 +24,13 @@ import {
 /** The one and only copy of the current PDF's contents. In memory, nowhere else. */
 let extraction = null;
 
+/**
+ * The PDF exactly as extracted, kept so a Config script can be re-run from a
+ * clean slate instead of stacking edits on its own output. Same rules as
+ * `extraction`: memory only, dropped with it.
+ */
+let pristine = null;
+
 const HOST_ID = 'pdftoformext-overlay-host';
 const TOGGLE_SIZE = 30;
 const EDGE = 8;
@@ -31,9 +38,12 @@ const EDGE = 8;
 const UNPICKABLE = new Set(['hidden', 'submit', 'reset', 'button', 'image', 'file', 'password']);
 /** A search this broad is a bad search; say so rather than render thousands of rows. */
 const SEARCH_LIMIT = 200;
+/** A user script that never returns must not hold the panel hostage. */
+const RUN_TIMEOUT = 5000;
 
 function forget() {
   extraction = null;
+  pristine = null;
 }
 
 // Belt and braces: drop the data on navigation even though the whole isolated
@@ -90,6 +100,19 @@ function render() {
         </div>
         <section class="pfx-config" hidden>
           <div class="pfx-config-main">
+            <section class="pfx-js">
+              <button class="pfx-js-toggle" type="button" aria-expanded="false">
+                <span class="pfx-js-caret" aria-hidden="true">▸</span> Script
+              </button>
+              <div class="pfx-js-body" hidden>
+                <iframe class="pfx-js-frame" title="JavaScript editor"></iframe>
+                <div class="pfx-js-actions">
+                  <button class="pfx-js-run" type="button" disabled>Run</button>
+                  <button class="pfx-js-clear" type="button">Clear console</button>
+                </div>
+                <div class="pfx-js-console" role="log" aria-live="polite"></div>
+              </div>
+            </section>
             <p class="pfx-config-hint"></p>
             <div class="pfx-map-list"></div>
             <p class="pfx-map-empty">No mappings for this page yet.</p>
@@ -147,9 +170,22 @@ async function wire(shadow, host) {
   const pickerTabs = $('.pfx-picker-tabs');
   const pickerFilter = $('.pfx-picker-filter');
   const pickerBody = $('.pfx-picker-body');
+  const jsSection = $('.pfx-js');
+  const jsToggle = $('.pfx-js-toggle');
+  const jsCaret = $('.pfx-js-caret');
+  const jsBody = $('.pfx-js-body');
+  // Not const: killing a runaway script means replacing the element outright.
+  let jsFrame = $('.pfx-js-frame');
+  const jsRun = $('.pfx-js-run');
+  const jsConsole = $('.pfx-js-console');
 
   /** Mappings as last committed to storage — what the rows are restored from. */
   let savedMappings = [];
+  /** The Config script, as edited and as last committed. */
+  let scriptText = '';
+  let savedScript = '';
+  /** The private channel to the sandboxed editor; null until it says hello. */
+  let framePort = null;
   let rowSeq = 0;
 
   const setStatus = (text, tone = '') => {
@@ -169,15 +205,22 @@ async function wire(shadow, host) {
     const loaded = Boolean(extraction);
     fillButton.disabled = !loaded || currentRowMappings().length === 0;
     configButton.disabled = !loaded;
-    // An empty list is still worth saving when there is something to clear.
-    saveButton.disabled = currentRowMappings().length === 0 && savedMappings.length === 0;
+    // An empty list is still worth saving when there is something to clear, and
+    // an edited script is a reason of its own.
+    saveButton.disabled =
+      currentRowMappings().length === 0 && savedMappings.length === 0 && scriptText === savedScript;
+    jsRun.disabled = !loaded || !framePort;
+    // The section is collapsed by default, so a stored script needs a tell.
+    jsToggle.toggleAttribute('data-has-script', Boolean(scriptText));
     if (configButton.disabled && !config.hidden) openConfig(false);
   };
 
-  /** Export writes the whole config file, so it needs a mapping *somewhere*. */
+  /** Export writes the whole config file, so it needs something saved *somewhere*. */
   const refreshExportState = async () => {
     const stored = await loadAll().catch(() => null);
-    exportButton.disabled = !Object.values(stored?.sites ?? {}).some((site) => site.mappings?.length);
+    exportButton.disabled = !Object.values(stored?.sites ?? {}).some(
+      (site) => site.mappings?.length || site.script,
+    );
   };
 
   /** Reflect whatever `extraction` currently is — never a caller's idea of it. */
@@ -264,7 +307,8 @@ async function wire(shadow, host) {
     panel.hidden = !open;
     toggle.setAttribute('aria-expanded', String(open));
     arrow.textContent = open ? '▴' : '▾';
-    if (!open) openConfig(false);
+    if (open) remeasureEditor();
+    else openConfig(false);
   };
 
   toggle.addEventListener('click', () => {
@@ -290,11 +334,15 @@ async function wire(shadow, host) {
     closePicker();
     forget();
     tablesCache = null;
+    clearConsole();
     setLoaded();
 
     try {
       const buffer = await file.arrayBuffer();
       extraction = await extractPdf(buffer);
+      // The slate a Config script is restored to before each run. Every entry
+      // field is JSON-safe, so a round trip is a faithful and cheap deep copy.
+      pristine = clone(extraction);
       tablesCache = null;
       const counts = summarize(extraction);
       setStatus(`${counts.total} values from ${file.name} (${counts.fields} fields, ${counts.cells} table cells).`, 'ok');
@@ -468,6 +516,9 @@ async function wire(shadow, host) {
     const button = pickerRow?.querySelector('.pfx-map-key');
     pickerRow = null;
     button?.setAttribute('aria-expanded', 'false');
+    // The Script section is inside the area the picker took over, so the editor
+    // is coming back from `display: none` and has to be told to measure again.
+    remeasureEditor();
     // Only chase the focus back if there is something visible to chase it to.
     if (button?.isConnected && !panel.hidden && !config.hidden) button.focus();
   }
@@ -728,6 +779,7 @@ async function wire(shadow, host) {
     if (open) {
       document.addEventListener('mousedown', onPagePress, true);
       document.addEventListener('click', onPagePick, true);
+      remeasureEditor();
     } else {
       document.removeEventListener('mousedown', onPagePress, true);
       document.removeEventListener('click', onPagePick, true);
@@ -738,15 +790,232 @@ async function wire(shadow, host) {
 
   configButton.addEventListener('click', () => openConfig(config.hidden));
 
+  /* ---------------------------------------------------------- script */
+
+  /**
+   * The script section: an editor, a console and a Run button that rewrites the
+   * extraction object.
+   *
+   * The editor and the evaluator live in a sandboxed extension page loaded as an
+   * iframe, because `eval` and `new Function` are blocked in an MV3 content
+   * script's isolated world and a sandboxed page's CSP is the supported way to
+   * run a code string. It is also the only place Ace — a classic script — loads
+   * without a module wrapper or shadow-root style plumbing.
+   *
+   * The frame sits in the *host page's* DOM, so `postMessage` to it and back
+   * would be readable by the page, and PDF contents travel that wire. Only the
+   * frame's contentless "ready" ping uses the window; everything after it goes
+   * over a MessagePort the page has no way to obtain.
+   */
+
+  let runSeq = 0;
+  let pendingRun = 0;
+  let runTimer = 0;
+
+  const postFrame = (message) => framePort?.postMessage(message);
+
+  /** Ace mis-measures itself when it comes back from `display: none`. */
+  const remeasureEditor = () => {
+    if (!jsBody.hidden) postFrame({ type: 'pfx-resize' });
+  };
+
+  // ~1 MB of editor is not worth loading on a page nobody opens this on.
+  //
+  // No `sandbox` attribute on the element: the manifest's `sandbox.pages` entry
+  // is what sandboxes this page, and it is what selects the CSP that permits the
+  // eval. An attribute here would be redundant at best.
+  function ensureFrame() {
+    if (jsFrame.src) return;
+    jsFrame.src = chrome.runtime.getURL('src/sandbox/runner.html');
+  }
+
+  function openScript(open) {
+    jsBody.hidden = !open;
+    jsToggle.setAttribute('aria-expanded', String(open));
+    jsToggle.classList.toggle('pfx-active', open);
+    jsCaret.textContent = open ? '▾' : '▸';
+    if (open) {
+      ensureFrame();
+      remeasureEditor();
+    }
+  }
+
+  jsToggle.addEventListener('click', () => openScript(jsBody.hidden));
+
+  /* -------------------------------------------------- script console */
+
+  function clearConsole() {
+    jsConsole.replaceChildren();
+  }
+
+  function logLine(text, level = 'log') {
+    const el = document.createElement('div');
+    el.className = 'pfx-js-line';
+    el.dataset.level = level;
+    el.textContent = text;
+    jsConsole.append(el);
+    jsConsole.scrollTop = jsConsole.scrollHeight;
+  }
+
+  $('.pfx-js-clear').addEventListener('click', clearConsole);
+
+  /* ------------------------------------------------------ script run */
+
+  function runScript() {
+    if (!extraction || !pristine || !framePort) return;
+    closePicker();
+
+    // Restore first and unconditionally: a script edits the PDF as it came out
+    // of pdf.js, never as its own last run left it. Running twice is running once.
+    extraction = clone(pristine);
+    tablesCache = null;
+    setLoaded();
+    relabelRowKeys();
+
+    clearConsole();
+    pendingRun = (runSeq += 1);
+    postFrame({ type: 'pfx-run', id: pendingRun, pdf: extraction });
+
+    clearTimeout(runTimer);
+    runTimer = setTimeout(() => {
+      if (!pendingRun) return;
+      pendingRun = 0;
+      // The frame is its own event loop, so a runaway script never froze the
+      // page — but it will never answer either. Only a new frame ends it.
+      resetFrame();
+      logLine(`Script did not finish — stopped after ${RUN_TIMEOUT / 1000}s. The PDF is unchanged.`, 'error');
+      setStatus('Script did not finish — the PDF is unchanged.', 'error');
+    }, RUN_TIMEOUT);
+  }
+
+  jsRun.addEventListener('click', runScript);
+
+  function onResult(message) {
+    if (message.id !== pendingRun) return;
+    pendingRun = 0;
+    clearTimeout(runTimer);
+
+    for (const entry of message.logs ?? []) logLine(entry.text, entry.level);
+
+    if (message.error) {
+      logLine(message.error, 'error');
+      setStatus('Script failed — the PDF is unchanged.', 'error');
+      return;
+    }
+
+    extraction = normalise(message.pdf);
+    tablesCache = null;
+    setLoaded();
+    relabelRowKeys();
+
+    const { changed, added, removed } = countChanges(pristine, extraction);
+    const summary =
+      `${Object.keys(extraction).length} values — ${changed} changed, ${added} added, ${removed} removed` +
+      ` (${message.ms ?? 0} ms).`;
+    logLine(summary, 'ok');
+    setStatus(`Script applied. ${summary}`, 'ok');
+  }
+
+  /**
+   * A script is free to build entries by hand, and the picker, `tablesOf` and
+   * `fillMapped` all assume `entry.key` is the key it is filed under. Repair
+   * rather than reject — and say so, since a repaired key is not the one the
+   * script thought it wrote.
+   */
+  function normalise(raw) {
+    const entries = {};
+    let dropped = 0;
+    let repaired = 0;
+
+    for (const [key, entry] of Object.entries(raw ?? {})) {
+      if (!entry || typeof entry !== 'object') {
+        dropped += 1;
+        continue;
+      }
+      if (entry.key !== key) repaired += 1;
+      entries[key] = { ...entry, key };
+    }
+
+    if (dropped) logLine(`Ignored ${dropped} value(s) that were not objects.`, 'warn');
+    if (repaired) logLine(`Repaired ${repaired} value(s) whose .key did not match where it was filed.`, 'warn');
+    return entries;
+  }
+
+  function countChanges(before, after) {
+    let changed = 0;
+    let added = 0;
+    let removed = 0;
+
+    for (const [key, entry] of Object.entries(after)) {
+      if (!(key in before)) added += 1;
+      else if (JSON.stringify(entry) !== JSON.stringify(before[key])) changed += 1;
+    }
+    for (const key of Object.keys(before)) if (!(key in after)) removed += 1;
+
+    return { changed, added, removed };
+  }
+
+  /* ------------------------------------------------- script protocol */
+
+  function onFramePort(event) {
+    const message = event.data;
+    if (message?.type === 'pfx-change') {
+      scriptText = message.code ?? '';
+      refreshControls();
+    } else if (message?.type === 'pfx-result') {
+      onResult(message);
+    }
+  }
+
+  /** Hands the frame a fresh private channel and the script it should hold. */
+  function adoptFrame() {
+    const channel = new MessageChannel();
+    framePort = channel.port1;
+    framePort.onmessage = onFramePort;
+    jsFrame.contentWindow.postMessage({ type: 'pfx-port' }, '*', [channel.port2]);
+    postFrame({ type: 'pfx-init', code: scriptText || null });
+    remeasureEditor();
+    refreshControls();
+  }
+
+  /**
+   * The only way to stop a script that will not stop itself. A fresh element
+   * rather than a re-`src`: a frame stuck mid-loop cannot be navigated, but it
+   * can be detached, and the editor's contents are ours to restore anyway.
+   */
+  function resetFrame() {
+    framePort?.close();
+    framePort = null;
+
+    const fresh = jsFrame.cloneNode(false);
+    fresh.removeAttribute('src');
+    jsFrame.replaceWith(fresh);
+    jsFrame = fresh;
+
+    refreshControls();
+    ensureFrame();
+  }
+
+  // `event.source` is set by the browser, so the page cannot forge a hello from
+  // the frame. It carries nothing either way — the port is the private part.
+  addEventListener('message', (event) => {
+    if (event.source !== jsFrame.contentWindow || event.data?.type !== 'pfx-ready') return;
+    adoptFrame();
+  });
+
   /* -------------------------------------------------- config actions */
 
   saveButton.addEventListener('click', async () => {
     const list = currentRowMappings();
-    const ok = await saveSite({ mappings: list });
+    // The script rides along with the mappings: both are this page's config, and
+    // a second button for it would only invite forgetting one of them.
+    const ok = await saveSite({ mappings: list, script: scriptText });
     savedMappings = list;
+    savedScript = scriptText;
+    const withScript = scriptText ? ' and the script' : '';
     setStatus(
       ok
-        ? `Saved ${list.length} mapping(s) for ${truncate(siteKey(), 40)}.`
+        ? `Saved ${list.length} mapping(s)${withScript} for ${truncate(siteKey(), 40)}.`
         : 'Could not reach extension storage — mappings kept for this tab only.',
       ok ? 'ok' : 'warn',
     );
@@ -766,7 +1035,9 @@ async function wire(shadow, host) {
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     // Sites holding only a toggle position are along for the ride, not the point.
-    const mapped = Object.values(stored.sites ?? {}).filter((entry) => entry.mappings?.length).length;
+    const mapped = Object.values(stored.sites ?? {}).filter(
+      (entry) => entry.mappings?.length || entry.script,
+    ).length;
     setStatus(`Exported mappings for ${mapped} page(s).`, 'ok');
   });
 
@@ -781,6 +1052,9 @@ async function wire(shadow, host) {
       const count = await importConfig(JSON.parse(await file.text()));
       const site = await loadSite();
       savedMappings = site.mappings;
+      savedScript = site.script;
+      scriptText = site.script;
+      postFrame({ type: 'pfx-init', code: scriptText || null });
       renderRows(savedMappings);
       refreshControls();
       refreshExportState();
@@ -796,10 +1070,23 @@ async function wire(shadow, host) {
 
   const site = await loadSite();
   savedMappings = site.mappings;
+  // Seeded before the frame exists, so saving without ever opening the section
+  // cannot wipe a stored script. It is never run on its own — Run is a click.
+  savedScript = site.script;
+  scriptText = site.script;
   renderRows(savedMappings);
   refreshControls();
   refreshExportState();
   moveTo(site.toggle ?? pos);
+}
+
+/**
+ * Deep copy of an extraction object. JSON rather than structuredClone because
+ * every entry field is JSON-safe by construction and this drops the `undefined`
+ * ones (an absent `options`) instead of carrying them.
+ */
+function clone(entries) {
+  return JSON.parse(JSON.stringify(entries));
 }
 
 function summarize(entries) {
