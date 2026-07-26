@@ -63,7 +63,6 @@ vendor/
 example/
   test-form.html            standalone page with fields, for manual testing
   test-form.pdf             fixture to fill from (AcroForm + two table shapes)
-  make-test-pdf.mjs         regenerates test-form.pdf; authoring tool, not shipped
 ```
 
 `bootstrap.js` exists because MV3 `content_scripts` cannot declare
@@ -294,9 +293,6 @@ Cancel must leave a key exactly as it was, `Clear` must blank it, and every way 
 of the picker must close it cleanly — deleting the target row, clicking a page field
 (which reveals and flashes the new row), loading a second PDF, closing Config,
 collapsing the panel.
-
-`example/make-test-pdf.mjs` regenerates the fixture (`node example/make-test-pdf.mjs`).
-Edit it rather than hand-patching the PDF.
 
 Loading the extension: `chrome://extensions` → Developer mode → Load unpacked →
 select this directory.
