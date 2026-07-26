@@ -49,6 +49,11 @@ it has to read storage.
 
 ```
 manifest.json               MV3 manifest
+icons/
+  icon-16.png               toolbar; drawn at its own scale, not downsampled
+  icon-32.png               toolbar @2x; same compact geometry as 16
+  icon-48.png               extensions page
+  icon-128.png              store / install dialog
 src/
   content/
     bootstrap.js            classic content script; dynamic-imports overlay.js
@@ -361,7 +366,12 @@ never sees them.
   clear the latter. Keeping the list at exactly one entry is what makes the privacy
   claim checkable at a glance, so do not add to it casually. The `sandbox` and
   `content_security_policy` keys the script section added are not permissions and
-  do not widen that list.
+  do not widen that list, and neither do `icons`/`action`.
+- The toolbar button (`action`) is **icon only** — no popup and no `onClicked`
+  handler, because there is no service worker and the whole UI is the in-page arrow
+  button. It is there so the extension has a face in the toolbar. Giving it
+  behaviour means adding a background script, which is a real change rather than a
+  tweak to the manifest.
 - Parsing runs in a real pdf.js worker where the host page's CSP allows one, and
   silently retries on the main thread ("fake worker") where it does not. Both
   paths are local; neither touches the network.

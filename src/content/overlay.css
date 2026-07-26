@@ -198,9 +198,16 @@
 
 /* ---------------------------------------------------------- config */
 
+/* Same bargain as .pfx-picker-body and .pfx-js-console, one level up: the whole
+   Config area scrolls so the panel does not have to, because .pfx-panel must stay
+   `overflow: hidden`. `overscroll-behavior: contain` keeps a scroll that runs out
+   of room here from scrolling the host page underneath. */
 .pfx-config {
+  max-height: min(520px, 60vh);
   margin-top: 10px;
   padding-top: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-top: 1px solid var(--pfx-border);
 }
 
