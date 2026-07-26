@@ -1,4 +1,4 @@
-# pdftoformtext
+# pdftoforms
 
 A Chrome extension (Manifest V3) that fills the form you are looking at from a PDF.
 
