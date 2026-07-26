@@ -24,7 +24,7 @@
     "pages": ["src/sandbox/runner.html"]
   },
   "content_security_policy": {
-    "sandbox": "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'none'; child-src 'none'; form-action 'none';"
+    "sandbox": "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; child-src 'none'; form-action 'none';"
   },
   "content_scripts": [
     {

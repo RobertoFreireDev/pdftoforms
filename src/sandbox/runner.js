@@ -60,10 +60,14 @@ const MAX_DEPTH = 2;
  * ------------------------------------------------------------------ */
 
 const editor = ace.edit('editor');
-editor.session.setMode('ace/mode/javascript');
 // No worker: it would need its own URL under an opaque origin, and syntax errors
-// already surface in the overlay's console the moment Run is pressed.
+// already surface in the overlay's console the moment Run is pressed. This must
+// come *before* setMode — setting a mode starts the mode's worker, which Ace
+// spawns from a blob: URL the sandbox CSP refuses; turning it off afterwards
+// stops a worker that was already created, and the console still shows the
+// child-src violation.
 editor.session.setUseWorker(false);
+editor.session.setMode('ace/mode/javascript');
 editor.setOptions({
   fontSize: '12px',
   tabSize: 2,

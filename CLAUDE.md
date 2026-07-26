@@ -332,7 +332,14 @@ never sees them.
   as an edit — lighting Save and the "saved script" dot for something nobody typed.
 - Ace's syntax **worker is off** (`setUseWorker(false)`): it would need its own URL
   under an opaque origin, and syntax errors reach the console on Run anyway. That
-  is why `worker-javascript.js` is not vendored.
+  is why `worker-javascript.js` is not vendored. It has to be turned off **before**
+  `setMode`, which starts the mode's worker itself — Ace spawns it from a `blob:`
+  URL that the sandbox CSP's `child-src 'none'` blocks, so disabling it afterwards
+  only stops a worker that already existed and already logged a violation.
+- The sandbox CSP allows `img-src 'self' data:` because Ace's core CSS draws the
+  gutter's fold arrows from inline `data:image/png` URLs; under `default-src 'none'`
+  they are blocked and every editor line logs a violation. `data:` images fetch
+  nothing, so this does not touch the no-network promise.
 - `normalise()` re-files every returned entry so `entry.key` matches its map key,
   because `tablesOf`, the picker and `fillMapped` all assume it and a hand-built
   entry easily breaks it. It repairs and reports rather than rejecting.
