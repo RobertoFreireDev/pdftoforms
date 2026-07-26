@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pdftoformext — manual test form 3 (SAP quotation intake)</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    max-width: 70rem;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 6rem;
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { margin-bottom: 0.25rem; font-size: 1.4rem; }
+  .intro { margin-top: 0; color: #666; }
+  .intro code, .hint code { background: #8881; padding: 0 0.25em; border-radius: 3px; }
+  fieldset { margin: 1.5rem 0; padding: 1rem 1.25rem 1.25rem; border: 1px solid #8884; border-radius: 8px; }
+  legend { padding: 0 0.4rem; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.75rem 1.25rem; }
+  .cols-2 { grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr)); }
+  .field > label { display: block; margin-bottom: 0.2rem; font-weight: 500; }
+  .field { min-width: 0; }
+  input[type="text"], input[type="email"], input[type="tel"], input[type="number"],
+  input[type="date"], select, textarea {
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    font: inherit;
+    background: Canvas;
+    color: CanvasText;
+    border: 1px solid #8886;
+    border-radius: 5px;
+  }
+  input[readonly] { background: #8881; color: #888; }
+  textarea { min-height: 4.5rem; resize: vertical; }
+  .inline { display: flex; align-items: center; gap: 0.5rem; }
+  .inline input { width: auto; }
+  .options { display: flex; flex-wrap: wrap; gap: 1.25rem; }
+  .hint { margin: 0.2rem 0 0.9rem; font-size: 0.8rem; color: #888; }
+  .warn { color: #b4690e; }
+  table.grid-rows { width: 100%; border-collapse: collapse; }
+  table.grid-rows th, table.grid-rows td { padding: 0.2rem 0.3rem; text-align: left; vertical-align: top; }
+  table.grid-rows th {
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em;
+    text-transform: uppercase; color: #888; border-bottom: 1px solid #8884;
+  }
+  table.grid-rows td.pos { padding-top: 0.55rem; font-variant-numeric: tabular-nums; color: #888; }
+  table.grid-rows input, table.grid-rows select {
+    width: 100%; padding: 0.28rem 0.38rem; font: inherit;
+    background: Canvas; color: CanvasText; border: 1px solid #8886; border-radius: 4px;
+  }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .sentinel { border-color: #b4690e88 !important; }
+</style>
+</head>
+<body>
+
+<h1>pdftoformext — manual test form 3</h1>
+<p class="intro">
+  The fixture for this page is <code>example/test-form3.pdf</code>: a two-page,
+  text-only SAP <em>proposta comercial</em> (sales quotation) from a fictional
+  supplier, Ferrax, to a fictional customer, Mineradora Pedra Grande. It has no
+  AcroForm at all, so all 296 of its keys come out of the geometric pass under
+  <code>table.*</code> — 15 blocks, of which only tables 2, 4 and 5 have a header
+  row (≥3 columns); everything else is a two-column label/value block or a run of
+  prose.
+</p>
+<p class="intro">
+  This page is the <em>other side</em> of that document: the buyer's supply
+  portal, where a quotation that arrived as a PDF gets keyed in by hand. That is
+  the workflow the extension exists to remove, so map a section, hit
+  <strong>Fill page</strong>, and check it against the PDF.
+</p>
+<p class="intro">
+  Expected keys are in HTML comments beside each field so a run can be checked;
+  the extension never reads them. Fields marked <span class="warn">⚠</span> are
+  the interesting ones — a coercion that has to do real work, or one that is
+  <em>supposed</em> to fail.
+</p>
+
+<form id="pg-intake" onsubmit="event.preventDefault(); alert('Submit blocked — this page is a test harness.');">
+
+<!-- ================================================================
+     Clean ids here. Section 2 drops to names only and section 3 to
+     bracketed grid names, so one page exercises all of selectorsFor().
+     ================================================================ -->
+<fieldset>
+  <legend>Documento do fornecedor</legend>
+  <p class="hint">
+    Table 1 is the title block; its cells scatter across four columns because the
+    title, the document number and the date line are centred at different widths,
+    so every key here is positional.
+  </p>
+
+  <div class="grid">
+    <!-- table.1.r2.c2 -> "20031566" -->
+    <div class="field">
+      <label for="doc-numero">Nº da cotação (fornecedor)</label>
+      <input type="text" id="doc-numero" name="doc_numero" autocomplete="off">
+    </div>
+
+    <!-- ⚠ table.1.r4.c1 -> "Data: 24.07.2026 | Tipo doc.: ZQT"; toISODate picks
+         24.07.2026 out of the middle of the line and 24 > 12 settles day-first -->
+    <div class="field">
+      <label for="doc-data">Data de emissão</label>
+      <input type="date" id="doc-data" name="doc_data">
+    </div>
+
+    <!-- ⚠ table.1.r4.c1 again — same key, this time into a text input, so the
+         whole "Data: … | Tipo doc.: ZQT" line lands verbatim -->
+    <div class="field">
+      <label for="doc-tipo">Tipo de documento (bruto)</label>
+      <input type="text" id="doc-tipo" name="doc_tipo" autocomplete="off">
+    </div>
+
+    <!-- table.1.r1.c0 -> "PROPOSTA COMERCIAL – COTAÇÃO DE VENDA" -->
+    <div class="field">
+      <label for="doc-titulo">Título do documento</label>
+      <input type="text" id="doc-titulo" name="doc_titulo" autocomplete="off">
+    </div>
+
+    <!-- table.0.r0.c1 -> "SAP ECC 6.0 | MANDANTE 300 | IMPRESSÃO SD – VA22" -->
+    <div class="field">
+      <label for="doc-origem-sistema">Sistema de origem</label>
+      <input type="text" id="doc-origem-sistema" name="doc_origem_sistema" autocomplete="off">
+    </div>
+
+    <!-- table.10.r1.c0 -> "Documento gerado eletronicamente pelo SAP. Cotação nº
+         20031566 – válida até 22.08.2026." (page footer, table 10) -->
+    <div class="field">
+      <label for="doc-rodape">Rodapé / autenticidade</label>
+      <input type="text" id="doc-rodape" name="doc_rodape" autocomplete="off">
+    </div>
+  </div>
+
+  <p class="hint">
+    Organizational block — table 2 is one of the three with a real header row, so
+    the picker's column strip reads <code>ORG. VENDAS</code> …
+    <code>MOEDA</code> rather than <code>C0</code>/<code>C1</code>. Row 0 is the
+    header row and shows up as an ordinary body row; the values are all in row 1.
+  </p>
+
+  <div class="grid">
+    <!-- table.2.r1.c0 -> "BR10 – Ferrax Brasil" -->
+    <div class="field">
+      <label for="org-vendas">Organização de vendas</label>
+      <input type="text" id="org-vendas" name="org_vendas" autocomplete="off">
+    </div>
+
+    <!-- table.2.r1.c2 -> "20 – Aftermarket" -->
+    <div class="field">
+      <label for="org-setor">Setor de atividade</label>
+      <input type="text" id="org-setor" name="org_setor" autocomplete="off">
+    </div>
+
+    <!-- ⚠ table.2.r1.c3 -> "BR22 – Belo Horizonte/MG"; a select, so fillSelect
+         scores it against every option — the matching one is worded identically -->
+    <div class="field">
+      <label for="org-escritorio">Escritório de vendas</label>
+      <select id="org-escritorio" name="org_escritorio">
+        <option value="">— selecione —</option>
+        <option value="BR11">BR11 – Sorocaba/SP</option>
+        <option value="BR22">BR22 – Belo Horizonte/MG</option>
+        <option value="BR34">BR34 – Carajás/PA</option>
+        <option value="BR45">BR45 – Vitória/ES</option>
+      </select>
+    </div>
+
+    <!-- table.2.r1.c4 -> "315 – Bombas de Polpa" -->
+    <div class="field">
+      <label for="org-grupo">Grupo de vendedores</label>
+      <input type="text" id="org-grupo" name="org_grupo" autocomplete="off">
+    </div>
+
+    <!-- ⚠ table.2.r1.c5 -> "BRL"; select whose option value matches exactly -->
+    <div class="field">
+      <label for="org-moeda">Moeda</label>
+      <select id="org-moeda" name="org_moeda">
+        <option value="">— selecione —</option>
+        <option value="BRL">BRL — Real</option>
+        <option value="USD">USD — Dólar</option>
+        <option value="EUR">EUR — Euro</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ⚠ table.2.r1.c1 -> "10 – Venda direta"; a radio group, so fillRadioGroup
+       scores the value against each button's own label. "10 – Venda direta"
+       against "Venda direta" clears FILL_THRESHOLD on containment alone. -->
+  <div class="field" style="margin-top:0.75rem">
+    <label>Canal de distribuição</label>
+    <div class="options">
+      <label class="inline"><input type="radio" name="canal" value="direta"> Venda direta</label>
+      <label class="inline"><input type="radio" name="canal" value="repres"> Representante</label>
+      <label class="inline"><input type="radio" name="canal" value="distrib"> Distribuidor</label>
+      <label class="inline"><input type="radio" name="canal" value="ecom"> E-commerce</label>
+    </div>
+  </div>
+</fieldset>
+
+<!-- ================================================================
+     No ids from here down. selectorsFor() falls back to
+     [name="…"] and to "#pg-intake [name='…']".
+     ================================================================ -->
+<fieldset>
+  <legend>Partes envolvidas</legend>
+  <p class="hint">
+    Table 3 is a two-column block: the ordering party (AG) on the left, the goods
+    recipient (WE) on the right, seven rows each. Two columns means no header row
+    is inferred, so each cell's <code>label</code> comes from the cell to its
+    left — which is why the right-hand column's entries read sensibly in the
+    picker and the left-hand ones don't.
+  </p>
+
+  <div class="grid cols-2">
+    <div>
+      <!-- table.3.r0.c0 -> "EMISSOR DA ORDEM (AG) – 0000308914" -->
+      <div class="field">
+        <label for="ag-codigo">Emissor da ordem (AG)</label>
+        <input type="text" name="parceiro[ag].codigo" id="ag-codigo" autocomplete="off">
+      </div>
+
+      <!-- table.3.r1.c0 -> "MINERADORA PEDRA GRANDE S.A." -->
+      <div class="field">
+        <label for="ag-nome">Razão social</label>
+        <input type="text" name="parceiro[ag].nome" id="ag-nome" autocomplete="off">
+      </div>
+
+      <!-- table.3.r2.c0 -> "Rod. MG-431, km 18 – Fazenda Três Marcos – Zona Rural" -->
+      <div class="field">
+        <label for="ag-endereco">Endereço</label>
+        <input type="text" name="parceiro[ag].endereco" id="ag-endereco" autocomplete="off">
+      </div>
+
+      <!-- table.3.r3.c0 -> "35702-450 – Sete Lagoas/MG – Brasil" -->
+      <div class="field">
+        <label for="ag-municipio">CEP / município</label>
+        <input type="text" name="parceiro[ag].municipio" id="ag-municipio" autocomplete="off">
+      </div>
+
+      <!-- table.3.r4.c0 -> "CNPJ 41.307.226/0002-08 · IE 554.019.883.0071" -->
+      <div class="field">
+        <label for="ag-cnpj">CNPJ / IE</label>
+        <input type="text" name="parceiro[ag].cnpj" id="ag-cnpj" autocomplete="off">
+      </div>
+
+      <!-- table.3.r5.c0 -> "Contato: Depto. de Suprimentos – Sr. Eduardo Rangel" -->
+      <div class="field">
+        <label for="ag-contato">Contato</label>
+        <input type="text" name="parceiro[ag].contato" id="ag-contato" autocomplete="off">
+      </div>
+
+      <!-- table.3.r6.c0 -> "suprimentos@pedragrande.com.br · (31) 4020-5500" -->
+      <div class="field">
+        <label for="ag-canal">E-mail / telefone</label>
+        <input type="text" name="parceiro[ag].canal" id="ag-canal" autocomplete="off">
+      </div>
+    </div>
+
+    <div>
+      <!-- table.3.r0.c1 -> "RECEBEDOR DA MERCADORIA (WE) – 0000308914-02" -->
+      <div class="field">
+        <label for="we-codigo">Recebedor da mercadoria (WE)</label>
+        <input type="text" name="parceiro[we].codigo" id="we-codigo" autocomplete="off">
+      </div>
+
+      <!-- table.3.r1.c1 -> "MINERADORA PEDRA GRANDE S.A. – UNIDADE SETE LAGOAS" -->
+      <div class="field">
+        <label for="we-nome">Unidade</label>
+        <input type="text" name="parceiro[we].nome" id="we-nome" autocomplete="off">
+      </div>
+
+      <!-- table.3.r2.c1 -> "Almoxarifado Central – Portaria 3 – Rod. MG-431, km 19" -->
+      <div class="field">
+        <label for="we-endereco">Local de entrega</label>
+        <input type="text" name="parceiro[we].endereco" id="we-endereco" autocomplete="off">
+      </div>
+
+      <!-- table.3.r4.c1 -> "Recebimento: seg. a sex., 07h00 às 16h00" -->
+      <div class="field">
+        <label for="we-janela">Janela de recebimento</label>
+        <input type="text" name="parceiro[we].janela" id="we-janela" autocomplete="off">
+      </div>
+
+      <!-- table.3.r5.c1 -> "Contato: Almoxarifado – Sra. Camila Prado" -->
+      <div class="field">
+        <label for="we-contato">Contato no almoxarifado</label>
+        <input type="text" name="parceiro[we].contato" id="we-contato" autocomplete="off">
+      </div>
+
+      <!-- ⚠ table.3.r6.c1 -> "Requer agendamento prévio de descarga (SAP: texto
+           remessa)". Into a checkbox: the text is in neither TRUTHY nor FALSY, so
+           toBoolean falls through to Boolean(text) and the box ends up checked. -->
+      <div class="field" style="margin-top:1.35rem">
+        <label class="inline">
+          <input type="checkbox" name="parceiro[we].agendamento" value="1">
+          Exige agendamento prévio de descarga
+        </label>
+      </div>
+
+      <!-- ⚠ same key into a textarea, to keep the sentence itself somewhere -->
+      <div class="field">
+        <label for="we-obs">Observação de remessa</label>
+        <textarea name="parceiro[we].obs" id="we-obs" style="min-height:3rem"></textarea>
+      </div>
+    </div>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Referências e condições da consulta</legend>
+  <p class="hint">
+    Table 4, the second headered block. All six values are in row 1.
+  </p>
+
+  <div class="grid">
+    <!-- table.4.r1.c0 -> "RFQ 4500612984 / rev. 01" -->
+    <div class="field">
+      <label for="ref-rfq">Nossa referência (RFQ)</label>
+      <input type="text" name="ref_rfq" id="ref-rfq" autocomplete="off">
+    </div>
+
+    <!-- table.4.r1.c1 -> "SC-2026-009312" -->
+    <div class="field">
+      <label for="ref-sc">Nº da solicitação de compra</label>
+      <input type="text" name="ref_sc" id="ref-sc" autocomplete="off">
+    </div>
+
+    <!-- ⚠ table.4.r1.c2 -> "20.07.2026" -> 2026-07-20 -->
+    <div class="field">
+      <label for="ref-data">Data da consulta</label>
+      <input type="date" name="ref_data_consulta" id="ref-data">
+    </div>
+
+    <!-- table.4.r1.c3 -> "M. Tavares – Aftermarket" -->
+    <div class="field">
+      <label for="ref-resp">Responsável no fornecedor</label>
+      <input type="text" name="ref_responsavel" id="ref-resp" autocomplete="off">
+    </div>
+
+    <!-- ⚠ table.4.r1.c4 -> "ZB30 – 30 dias data da NF"; the option text is worded
+         exactly the same, so similarity() returns 1 -->
+    <div class="field">
+      <label for="ref-pgto">Condição de pagamento</label>
+      <select name="ref_cond_pagamento" id="ref-pgto">
+        <option value="">— selecione —</option>
+        <option value="ZB00">ZB00 – à vista</option>
+        <option value="ZB30">ZB30 – 30 dias data da NF</option>
+        <option value="ZB60">ZB60 – 60 dias data da NF</option>
+        <option value="ZB90">ZB90 – 30/60/90 dias</option>
+      </select>
+    </div>
+
+    <!-- table.4.r1.c5 -> "CIP Sete Lagoas/MG". Kept as text on purpose: a select
+         of bare codes (CIP/CIF/FOB) would score ~0.4 against this string and be
+         skipped as "value did not fit". Incoterm-only extraction is a parsing
+         job, not a mapping job. -->
+    <div class="field">
+      <label for="ref-incoterm">Incoterm</label>
+      <input type="text" name="ref_incoterm" id="ref-incoterm" autocomplete="off">
+    </div>
+
+    <!-- ⚠ table.9.r0.c1 -> "30 dias corridos – até 22.08.2026."; the date input
+         gets 2026-08-22 out of a sentence -->
+    <div class="field">
+      <label for="ref-validade">Proposta válida até</label>
+      <input type="date" name="ref_validade" id="ref-validade">
+    </div>
+
+    <!-- table.9.r2.c1 -> the "Prazo de entrega" sentence from table 9 -->
+    <div class="field">
+      <label for="ref-prazo">Base do prazo de entrega</label>
+      <input type="text" name="ref_prazo_base" id="ref-prazo" autocomplete="off">
+    </div>
+  </div>
+</fieldset>
+
+<!-- ================================================================
+     The item grid. Table 5 is the wide one: 20 rows and columns
+     running to c14, sparse and out of order — c7 holds the "PREÇO
+     UNIT." header while the prices themselves land in c8 or c9
+     depending on how wide the number is. Map by clicking the cell
+     you can see; do not try to compute these.
+     ================================================================ -->
+<fieldset>
+  <legend>Itens da proposta</legend>
+  <p class="hint">
+    Eight items, positions 10–80. Each item's description spills onto one or two
+    continuation rows in the PDF (r4, r5, r7, …), which the extraction keeps as
+    their own cells in column 2 — so the second description field of each row
+    exists to catch them. Quantities and prices go into <code>number</code>
+    inputs, where <code>toNumber</code> has to read Brazilian
+    <code>18.470,00</code> as 18470.
+  </p>
+
+  <div style="overflow-x:auto">
+  <table class="grid-rows">
+    <thead>
+      <tr>
+        <th style="width:2.5rem">Pos.</th>
+        <th style="width:7rem">Material</th>
+        <th>Denominação</th>
+        <th>Complemento</th>
+        <th style="width:5.5rem">NCM</th>
+        <th style="width:4rem">Qtd</th>
+        <th style="width:5rem">UM</th>
+        <th style="width:5rem">Prazo</th>
+        <th style="width:7rem">Preço unit.</th>
+        <th style="width:5rem">Desc. %</th>
+        <th style="width:7rem">Valor líquido</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- ITEM 10 — PDF row r3, continuation rows r4 and r5 -->
+      <tr>
+        <td class="pos">10</td>
+        <!-- table.5.r3.c1 -> "30118420" -->
+        <td><input type="text" name="itens[10].material" autocomplete="off"></td>
+        <!-- table.5.r3.c2 -> "REVESTIMENTO FRONTAL / COVER PLATE LINER" -->
+        <td><input type="text" name="itens[10].denominacao" autocomplete="off"></td>
+        <!-- table.5.r4.c2 -> "HD6-1011-FX27 – BOMBA DE POLPA HD 6/4 D – LIGA"
+             (r5.c2 holds the third line, "FX-27 CROMO ALTO") -->
+        <td><input type="text" name="itens[10].complemento" autocomplete="off"></td>
+        <!-- table.5.r3.c3 -> "8413.91.00" -->
+        <td><input type="text" name="itens[10].ncm" autocomplete="off"></td>
+        <!-- table.5.r3.c4 -> "2" -->
+        <td><input type="number" class="num" name="itens[10].qtd" step="any"></td>
+        <!-- ⚠ table.5.r3.c5 -> "PC"; select, exact option-value match -->
+        <td>
+          <select name="itens[10].um">
+            <option value="">—</option>
+            <option value="PC">PC</option>
+            <option value="JG">JG</option>
+            <option value="KT">KT</option>
+            <option value="M">M</option>
+          </select>
+        </td>
+        <!-- table.5.r3.c6 -> "45" -->
+        <td><input type="text" class="num" name="itens[10].prazo" autocomplete="off"></td>
+        <!-- ⚠ table.5.r3.c8 -> "18.470,00" -> 18470 -->
+        <td><input type="number" class="num" name="itens[10].preco" step="any"></td>
+        <!-- table.5.r3.c11 -> "5,0" -> 5 -->
+        <td><input type="number" class="num" name="itens[10].desconto" step="any"></td>
+        <!-- table.5.r3.c13 -> "35.093,00" -> 35093 -->
+        <td><input type="number" class="num" name="itens[10].liquido" step="any"></td>
+      </tr>
+
+      <!-- ITEM 20 — PDF row r6, continuation r7 -->
+      <tr>
+        <td class="pos">20</td>
+        <!-- table.5.r6.c1 -> "30118421" -->
+        <td><input type="text" name="itens[20].material" autocomplete="off"></td>
+        <!-- table.5.r6.c2 -> "ROTOR / IMPELLER HD6-1147-FX27 – 5 PÁS – BOMBA" -->
+        <td><input type="text" name="itens[20].denominacao" autocomplete="off"></td>
+        <!-- table.5.r7.c2 -> "DE POLPA HD 6/4 D – LIGA FX-27 CROMO ALTO" -->
+        <td><input type="text" name="itens[20].complemento" autocomplete="off"></td>
+        <!-- table.5.r6.c3 -> "8413.91.00" -->
+        <td><input type="text" name="itens[20].ncm" autocomplete="off"></td>
+        <!-- table.5.r6.c4 -> "2" -->
+        <td><input type="number" class="num" name="itens[20].qtd" step="any"></td>
+        <!-- table.5.r6.c5 -> "PC" -->
+        <td>
+          <select name="itens[20].um">
+            <option value="">—</option>
+            <option value="PC">PC</option>
+            <option value="JG">JG</option>
+            <option value="KT">KT</option>
+            <option value="M">M</option>
+          </select>
+        </td>
+        <!-- table.5.r6.c6 -> "45" -->
+        <td><input type="text" class="num" name="itens[20].prazo" autocomplete="off"></td>
+        <!-- table.5.r6.c8 -> "27.980,50" -> 27980.5 -->
+        <td><input type="number" class="num" name="itens[20].preco" step="any"></td>
+        <!-- table.5.r6.c11 -> "5,0" -->
+        <td><input type="number" class="num" name="itens[20].desconto" step="any"></td>
+        <!-- table.5.r6.c13 -> "53.162,95" -->
+        <td><input type="number" class="num" name="itens[20].liquido" step="any"></td>
+      </tr>
+
+      <!-- ITEM 30 — PDF row r8, continuation r9 -->
+      <tr>
+        <td class="pos">30</td>
+        <!-- table.5.r8.c1 -> "30118433" -->
+        <td><input type="text" name="itens[30].material" autocomplete="off"></td>
+        <!-- table.5.r8.c2 -> "BUCHA DE GARGANTA / THROATBUSH HD6-1083-FX27" -->
+        <td><input type="text" name="itens[30].denominacao" autocomplete="off"></td>
+        <!-- table.5.r9.c2 -> "– BOMBA DE POLPA HD 6/4 D" -->
+        <td><input type="text" name="itens[30].complemento" autocomplete="off"></td>
+        <!-- table.5.r8.c3 -> "8413.91.00" -->
+        <td><input type="text" name="itens[30].ncm" autocomplete="off"></td>
+        <!-- table.5.r8.c4 -> "2" -->
+        <td><input type="number" class="num" name="itens[30].qtd" step="any"></td>
+        <!-- table.5.r8.c5 -> "PC" -->
+        <td>
+          <select name="itens[30].um">
+            <option value="">—</option>
+            <option value="PC">PC</option>
+            <option value="JG">JG</option>
+            <option value="KT">KT</option>
+            <option value="M">M</option>
+          </select>
+        </td>
+        <!-- table.5.r8.c6 -> "45" -->
+        <td><input type="text" class="num" name="itens[30].prazo" autocomplete="off"></td>
+        <!-- table.5.r8.c8 -> "9.640,00" -> 9640 -->
+        <td><input type="number" class="num" name="itens[30].preco" step="any"></td>
+        <!-- table.5.r8.c11 -> "5,0" -->
+        <td><input type="number" class="num" name="itens[30].desconto" step="any"></td>
+        <!-- table.5.r8.c13 -> "18.316,00" -->
+        <td><input type="number" class="num" name="itens[30].liquido" step="any"></td>
+      </tr>
+
+      <!-- ITEM 40 — PDF row r10, continuations r11 and r12. The imported one:
+           note the 90-day lead time against everyone else's 45. -->
+      <tr>
+        <td class="pos">40</td>
+        <!-- table.5.r10.c1 -> "30118447" -->
+        <td><input type="text" name="itens[40].material" autocomplete="off"></td>
+        <!-- table.5.r10.c2 -> "INSERTO DA PLACA DE ARMAÇÃO / FRAME PLATE" -->
+        <td><input type="text" name="itens[40].denominacao" autocomplete="off"></td>
+        <!-- table.5.r11.c2 -> "LINER INSERT HD6-1018-FX27 – BOMBA DE POLPA HD" -->
+        <td><input type="text" name="itens[40].complemento" autocomplete="off"></td>
+        <!-- table.5.r10.c3 -> "8413.91.00" -->
+        <td><input type="text" name="itens[40].ncm" autocomplete="off"></td>
+        <!-- table.5.r10.c4 -> "2" -->
+        <td><input type="number" class="num" name="itens[40].qtd" step="any"></td>
+        <!-- table.5.r10.c5 -> "PC" -->
+        <td>
+          <select name="itens[40].um">
+            <option value="">—</option>
+            <option value="PC">PC</option>
+            <option value="JG">JG</option>
+            <option value="KT">KT</option>
+            <option value="M">M</option>
+          </select>
+        </td>
+        <!-- table.5.r10.c6 -> "90" -->
+        <td><input type="text" class="num" name="itens[40].prazo" autocomplete="off"></td>
+        <!-- table.5.r10.c8 -> "14.320,00" -->
+        <td><input type="number" class="num" name="itens[40].preco" step="any"></td>
+        <!-- table.5.r10.c11 -> "5,0" -->
+        <td><input type="number" class="num" name="itens[40].desconto" step="any"></td>
+        <!-- table.5.r10.c13 -> "27.208,00" -->
+        <td><input type="number" class="num" name="itens[40].liquido" step="any"></td>
+      </tr>
+
+      <!-- ITEM 50 — PDF row r13, single line, no discount -->
+      <tr>
+        <td class="pos">50</td>
+        <!-- table.5.r13.c1 -> "30102965" -->
+        <td><input type="text" name="itens[50].material" autocomplete="off"></td>
+        <!-- table.5.r13.c2 -> "ANEL EXPULSOR / EXPELLER RING HD6-1060-FX27" -->
+        <td><input type="text" name="itens[50].denominacao" autocomplete="off"></td>
+        <td><input type="text" name="itens[50].complemento" autocomplete="off"></td>
+        <!-- table.5.r13.c3 -> "8413.91.00" -->
+        <td><input type="text" name="itens[50].ncm" autocomplete="off"></td>
+        <!-- table.5.r13.c4 -> "4" -->
+        <td><input type="number" class="num" name="itens[50].qtd" step="any"></td>
+        <!-- table.5.r13.c5 -> "PC" -->
+        <td>
+          <select name="itens[50].um">
+            <option value="">—</option>
+            <option value="PC">PC</option>
+            <option value="JG">JG</option>
+            <option value="KT">KT</option>
+            <option value="M">M</option>
+          </select>
+        </td>
+        <!-- table.5.r13.c6 -> "45" -->
+        <td><input type="text" class="num" name="itens[50].prazo" autocomplete="off"></td>
+        <!-- table.5.r13.c8 -> "3.115,00" -->
+        <td><input type="number" class="num" name="itens[50].preco" step="any"></td>
+        <!-- ⚠ table.5.r13.c11 -> "–" (an en dash, meaning "no discount"). Into a
+             number input toNumber strips it to "" and returns null, so the row is
+             reported as "value did not fit" and the field stays empty. That is
+             correct: the dash is a typographic placeholder, not a number. Map the
+             same key to a text field and the dash lands verbatim. -->
+        <td><input type="number" class="num" name="itens[50].desconto" step="any"></td>
+        <!-- table.5.r13.c13 -> "12.460,00" -->
+        <td><input type="number" class="num" name="itens[50].liquido" step="any"></td>
+      </tr>
+
+      <!-- ITEM 60 — PDF row r14, continuation r15 -->
+      <tr>
+        <td class="pos">60</td>
+        <!-- table.5.r14.c1 -> "30101188" -->
+        <td><input type="text" name="itens[60].material" autocomplete="off"></td>
+        <!-- table.5.r14.c2 -> "LUVA DE EIXO / SHAFT SLEEVE HD4-1074-I31 – AÇO" -->
+        <td><input type="text" name="itens[60].denominacao" autocomplete="off"></td>
+        <!-- table.5.r15.c2 -> "INOX 431" -->
+        <td><input type="text" name="itens[60].complemento" autocomplete="off"></td>
+        <!-- table.5.r14.c3 -> "8413.91.00" -->
+        <td><input type="text" name="itens[60].ncm" autocomplete="off"></td>
+        <!-- table.5.r14.c4 -> "4" -->
+        <td><input type="number" class="num" name="itens[60].qtd" step="any"></td>
+        <!-- table.5.r14.c5 -> "PC" -->
+        <td>
+          <select name="itens[60].um">
+            <option value="">—</option>
+            <option value="PC">PC</option>
+            <option value="JG">JG</option>
+            <option value="KT">KT</option>
+            <option value="M">M</option>
+          </select>
+        </td>
+        <!-- table.5.r14.c6 -> "30" -->
+        <td><input type="text" class="num" name="itens[60].prazo" autocomplete="off"></td>
+        <!-- table.5.r14.c8 -> "2.480,00" -->
+        <td><input type="number" class="num" name="itens[60].preco" step="any"></td>
+        <!-- table.5.r14.c11 -> "–", same as item 50 -->
+        <td><input type="number" class="num" name="itens[60].desconto" step="any"></td>
+        <!-- table.5.r14.c13 -> "9.920,00" -->
+        <td><input type="number" class="num" name="itens[60].liquido" step="any"></td>
+      </tr>
+
+      <!-- ITEM 70 — PDF row r16, continuation r17. ⚠ Its unit price sits in c9,
+           not c8: "685,00" is narrower than the other prices and starts further
+           right, so assignColumns puts it in its own band. Column indices in
+           this table are sparse and positional — read them off the picker. -->
+      <tr>
+        <td class="pos">70</td>
+        <!-- table.5.r16.c1 -> "30124770" -->
+        <td><input type="text" name="itens[70].material" autocomplete="off"></td>
+        <!-- table.5.r16.c2 -> "JOGO DE GAXETAS / GLAND PACKING KIT HD4-1083 –" -->
+        <td><input type="text" name="itens[70].denominacao" autocomplete="off"></td>
+        <!-- table.5.r17.c2 -> "GRAFITADA 12,7 MM" -->
+        <td><input type="text" name="itens[70].complemento" autocomplete="off"></td>
+        <!-- table.5.r16.c3 -> "4016.93.00" — a different NCM from the pump parts -->
+        <td><input type="text" name="itens[70].ncm" autocomplete="off"></td>
+        <!-- table.5.r16.c4 -> "6" -->
+        <td><input type="number" class="num" name="itens[70].qtd" step="any"></td>
+        <!-- ⚠ table.5.r16.c5 -> "JG" -->
+        <td>
+          <select name="itens[70].um">
+            <option value="">—</option>
+            <option value="PC">PC</option>
+            <option value="JG">JG</option>
+            <option value="KT">KT</option>
+            <option value="M">M</option>
+          </select>
+        </td>
+        <!-- table.5.r16.c6 -> "IMED." — text, not a number, which is why this
+             column is a text input on every row -->
+        <td><input type="text" class="num" name="itens[70].prazo" autocomplete="off"></td>
+        <!-- ⚠ table.5.r16.c9 -> "685,00" (c9, not c8) -->
+        <td><input type="number" class="num" name="itens[70].preco" step="any"></td>
+        <!-- table.5.r16.c11 -> "–" -->
+        <td><input type="number" class="num" name="itens[70].desconto" step="any"></td>
+        <!-- table.5.r16.c13 -> "4.110,00" -->
+        <td><input type="number" class="num" name="itens[70].liquido" step="any"></td>
+      </tr>
+
+      <!-- ITEM 80 — PDF row r18, continuation r19 -->
+      <tr>
+        <td class="pos">80</td>
+        <!-- table.5.r18.c1 -> "30126015" -->
+        <td><input type="text" name="itens[80].material" autocomplete="off"></td>
+        <!-- table.5.r18.c2 -> "KIT DE PARAFUSOS E ELEMENTOS DE FIXAÇÃO –" -->
+        <td><input type="text" name="itens[80].denominacao" autocomplete="off"></td>
+        <!-- table.5.r19.c2 -> "CONJUNTO CARCAÇA HD 6/4 D" -->
+        <td><input type="text" name="itens[80].complemento" autocomplete="off"></td>
+        <!-- table.5.r18.c3 -> "7318.15.00" -->
+        <td><input type="text" name="itens[80].ncm" autocomplete="off"></td>
+        <!-- table.5.r18.c4 -> "2" -->
+        <td><input type="number" class="num" name="itens[80].qtd" step="any"></td>
+        <!-- ⚠ table.5.r18.c5 -> "KT" -->
+        <td>
+          <select name="itens[80].um">
+            <option value="">—</option>
+            <option value="PC">PC</option>
+            <option value="JG">JG</option>
+            <option value="KT">KT</option>
+            <option value="M">M</option>
+          </select>
+        </td>
+        <!-- table.5.r18.c6 -> "30" -->
+        <td><input type="text" class="num" name="itens[80].prazo" autocomplete="off"></td>
+        <!-- table.5.r18.c8 -> "1.245,00" -->
+        <td><input type="number" class="num" name="itens[80].preco" step="any"></td>
+        <!-- table.5.r18.c11 -> "–" -->
+        <td><input type="number" class="num" name="itens[80].desconto" step="any"></td>
+        <!-- table.5.r18.c13 -> "2.490,00" -->
+        <td><input type="number" class="num" name="itens[80].liquido" step="any"></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Totais</legend>
+  <p class="hint">
+    Table 6 interleaves two things that are side by side on the page: the fiscal
+    note runs down column 0 while the totals sit in columns 1 and 2, so the rows
+    alternate between them and the totals land on rows 1, 3, 5, 7 and 8. The
+    grand total is its own block, table 7.
+  </p>
+
+  <div class="grid">
+    <!-- ⚠ table.6.r1.c2 -> "169.801,00" -> 169801 -->
+    <div class="field">
+      <label for="tot-bruto">Valor bruto dos itens</label>
+      <input type="number" class="num" name="total_bruto" id="tot-bruto" step="any">
+    </div>
+
+    <!-- ⚠ table.6.r3.c2 -> "-7.041,05" -> -7041.05, sign preserved -->
+    <div class="field">
+      <label for="tot-desconto">Desconto comercial</label>
+      <input type="number" class="num" name="total_desconto" id="tot-desconto" step="any">
+    </div>
+
+    <!-- table.6.r5.c2 -> "162.759,95" -->
+    <div class="field">
+      <label for="tot-liquido">Valor líquido das mercadorias</label>
+      <input type="number" class="num" name="total_liquido" id="tot-liquido" step="any">
+    </div>
+
+    <!-- table.6.r7.c2 -> "8.138,00" -->
+    <div class="field">
+      <label for="tot-ipi">IPI</label>
+      <input type="number" class="num" name="total_ipi" id="tot-ipi" step="any">
+    </div>
+
+    <!-- table.6.r8.c2 -> "19.531,19" -->
+    <div class="field">
+      <label for="tot-icms">ICMS incluso</label>
+      <input type="number" class="num" name="total_icms" id="tot-icms" step="any">
+    </div>
+
+    <!-- ⚠ table.7.r0.c1 -> "R$ 170.897,95"; the currency symbol is stripped -->
+    <div class="field">
+      <label for="tot-geral">Total da proposta</label>
+      <input type="number" class="num" name="total_proposta" id="tot-geral" step="any">
+    </div>
+
+    <!-- ⚠ table.7.r0.c1 again, into text — "R$ 170.897,95" verbatim -->
+    <div class="field">
+      <label for="tot-geral-txt">Total da proposta (como impresso)</label>
+      <input type="text" class="num" name="total_proposta_txt" id="tot-geral-txt" autocomplete="off">
+    </div>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Texto e anexos</legend>
+  <p class="hint">
+    Long prose is one cell per printed line, not one cell per paragraph — the
+    geometric pass has no way to know a wrapped line continues the one above it.
+    So each textarea below takes one line, and reassembling a paragraph means
+    mapping several fields or copying by hand. Worth seeing before promising
+    anyone that a quotation "imports itself".
+  </p>
+
+  <div class="grid cols-2">
+    <!-- table.6.r2.c0 -> "Operação interestadual SP → MG. CFOP previsto: 6.102
+         (venda de mercadoria adquirida de terceiros) e" — the first line only;
+         r3.c0 and r4.c0 through r7.c0 carry the rest -->
+    <div class="field">
+      <label for="txt-fiscal">Observação fiscal (1ª linha)</label>
+      <textarea name="txt_fiscal_1" id="txt-fiscal"></textarea>
+    </div>
+
+    <!-- table.6.r3.c0 -> the second line of the same paragraph -->
+    <div class="field">
+      <label for="txt-fiscal-2">Observação fiscal (2ª linha)</label>
+      <textarea name="txt_fiscal_2" id="txt-fiscal-2"></textarea>
+    </div>
+
+    <!-- table.12.r2.c0 -> the "Em atendimento à sua solicitação…" paragraph on
+         page 2; this one does fit on a single printed line -->
+    <div class="field">
+      <label for="txt-carta">Carta de apresentação — abertura</label>
+      <textarea name="txt_carta_abertura" id="txt-carta"></textarea>
+    </div>
+
+    <!-- table.12.r4.c0 -> the "Recomendamos a substituição conjunta…" paragraph -->
+    <div class="field">
+      <label for="txt-recom">Recomendação técnica</label>
+      <textarea name="txt_recomendacao" id="txt-recom"></textarea>
+    </div>
+
+    <!-- table.9.r7.c1 -> the warranty clause (its continuation is r8.c1) -->
+    <div class="field">
+      <label for="txt-garantia">Garantia</label>
+      <textarea name="txt_garantia" id="txt-garantia"></textarea>
+    </div>
+
+    <!-- table.9.r10.c1 -> the origin clause, naming item 40 as imported -->
+    <div class="field">
+      <label for="txt-origem">Origem dos materiais</label>
+      <textarea name="txt_origem" id="txt-origem"></textarea>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-top:0.75rem">
+    <!-- table.13.r3.c0 -> "aftermarket@ferrax.ind.br · (31) 4002-8100". An email
+         input takes it as plain text — targetKind() maps anything it does not
+         recognise to 'text', so no validation happens and the phone number
+         rides along. -->
+    <div class="field">
+      <label for="txt-contato-forn">Contato do fornecedor</label>
+      <input type="email" name="fornecedor_contato" id="txt-contato-forn" autocomplete="off">
+    </div>
+
+    <!-- table.13.r2.c0 -> "Departamento de Aftermarket – Escritório Belo Horizonte/MG" -->
+    <div class="field">
+      <label for="txt-depto-forn">Departamento</label>
+      <input type="text" name="fornecedor_depto" id="txt-depto-forn" autocomplete="off">
+    </div>
+  </div>
+</fieldset>
+
+<!-- ================================================================
+     Neither id nor name: selectorsFor() has only structuralPath() to
+     offer, which climbs to the nearest id — so every candidate here
+     reads "#pg-intake > fieldset:nth-of-type(7) > … > textarea".
+     ================================================================ -->
+<fieldset>
+  <legend>Parecer de suprimentos</legend>
+  <p class="hint">
+    Nothing in this block comes from the PDF — it is the buyer's own decision,
+    filled in by a person. It is here because the first three inputs have no
+    <code>id</code> and no <code>name</code>, so mapping one forces the
+    <code>:nth-of-type</code> path, the last candidate
+    <code>selectorsFor()</code> has (the radios below do have a name, and get the
+    usual <code>[name="decisao"][value="…"]</code>). Map the
+    <em>Justificativa</em> field to any key and confirm the structural selector
+    resolves.
+  </p>
+
+  <div class="grid">
+    <div class="field">
+      <label>Comprador responsável</label>
+      <input type="text" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Data do parecer</label>
+      <input type="date">
+    </div>
+  </div>
+
+  <div class="field" style="margin-top:0.75rem">
+    <label>Justificativa</label>
+    <textarea></textarea>
+  </div>
+
+  <div class="field" style="margin-top:0.75rem">
+    <label>Decisão</label>
+    <div class="options">
+      <label class="inline"><input type="radio" name="decisao" value="aprovar"> Aprovar e converter em pedido</label>
+      <label class="inline"><input type="radio" name="decisao" value="negociar"> Devolver para negociação</label>
+      <label class="inline"><input type="radio" name="decisao" value="recusar"> Recusar</label>
+    </div>
+  </div>
+</fieldset>
+
+<!-- ================================================================
+     The invariant. These four already hold values; a fill must leave
+     every one of them exactly as it is. If any changes, a guessing
+     pass has crept back into fillMapped.
+     ================================================================ -->
+<fieldset>
+  <legend>Não tocar — controle do invariante</legend>
+  <p class="hint">
+    Pre-filled with sentinels whose labels and names are deliberately close to
+    fields that <em>are</em> mapped above. Never map these. After
+    <strong>Fill page</strong>, all four must still read exactly as below —
+    that, and not the count in the status line, is the test.
+  </p>
+
+  <div class="grid">
+    <div class="field">
+      <label for="sentinel-doc">Nº da cotação (arquivo morto)</label>
+      <input class="sentinel" type="text" id="sentinel-doc" name="sentinel_doc_numero"
+             value="NÃO-ALTERAR-0001" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="sentinel-total">Total da proposta anterior</label>
+      <input class="sentinel num" type="number" id="sentinel-total" name="sentinel_total"
+             value="99999.99" step="any">
+    </div>
+    <div class="field">
+      <label for="sentinel-data">Data da consulta anterior</label>
+      <input class="sentinel" type="date" id="sentinel-data" name="sentinel_data" value="1999-12-31">
+    </div>
+    <div class="field">
+      <label for="sentinel-moeda">Moeda do contrato-quadro</label>
+      <select class="sentinel" id="sentinel-moeda" name="sentinel_moeda">
+        <option value="BRL">BRL — Real</option>
+        <option value="USD" selected>USD — Dólar</option>
+        <option value="EUR">EUR — Euro</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="field" style="margin-top:0.75rem">
+    <label class="inline">
+      <input class="sentinel" type="checkbox" name="sentinel_agendamento" checked>
+      Agendamento exigido no contrato-quadro (deve permanecer marcado)
+    </label>
+  </div>
+</fieldset>
+
+<p style="margin-top:1.5rem">
+  <button type="submit">Registrar proposta</button>
+  <button type="reset">Limpar</button>
+</p>
+
+</form>
+
+</body>
+</html>
